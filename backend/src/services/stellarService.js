@@ -25,15 +25,25 @@ async function syncPayments() {
     const student = await Student.findOne({ studentId: memo });
     if (!student) continue;
 
+    const paymentAmount = parseFloat(payOp.amount);
+
+    // Validate payment amount against the student's defined fee
+    const feeValidation = validatePaymentAgainstFee(paymentAmount, student.feeAmount);
+
     await Payment.create({
       studentId: memo,
       txHash: tx.hash,
-      amount: parseFloat(payOp.amount),
+      amount: paymentAmount,
+      feeAmount: student.feeAmount,
+      feeValidationStatus: feeValidation.status,
       memo,
       confirmedAt: new Date(tx.created_at),
     });
 
-    await Student.findOneAndUpdate({ studentId: memo }, { feePaid: true });
+    // Only mark as paid if the payment meets or exceeds the required fee
+    if (feeValidation.status === 'valid' || feeValidation.status === 'overpaid') {
+      await Student.findOneAndUpdate({ studentId: memo }, { feePaid: true });
+    }
   }
 }
 
@@ -43,7 +53,49 @@ async function verifyTransaction(txHash) {
   const ops = await tx.operations();
   const payOp = ops.records.find(op => op.type === 'payment' && op.to === SCHOOL_WALLET);
   if (!payOp) return null;
-  return { hash: tx.hash, memo: tx.memo, amount: parseFloat(payOp.amount), date: tx.created_at };
+
+  const amount = parseFloat(payOp.amount);
+
+  // Look up the student to validate against their fee
+  const student = await Student.findOne({ studentId: tx.memo });
+  const feeAmount = student ? student.feeAmount : null;
+  const feeValidation = feeAmount != null
+    ? validatePaymentAgainstFee(amount, feeAmount)
+    : { status: 'unknown', message: 'Student not found, cannot validate fee' };
+
+  return {
+    hash: tx.hash,
+    memo: tx.memo,
+    amount,
+    feeAmount,
+    feeValidation,
+    date: tx.created_at,
+  };
 }
 
-module.exports = { syncPayments, verifyTransaction };
+/**
+ * Validate a payment amount against the expected fee.
+ * @param {number} paymentAmount — the amount actually paid
+ * @param {number} expectedFee — the fee the student owes
+ * @returns {{ status: string, message: string }}
+ */
+function validatePaymentAgainstFee(paymentAmount, expectedFee) {
+  if (paymentAmount < expectedFee) {
+    return {
+      status: 'underpaid',
+      message: `Payment of ${paymentAmount} is less than the required fee of ${expectedFee}`,
+    };
+  }
+  if (paymentAmount > expectedFee) {
+    return {
+      status: 'overpaid',
+      message: `Payment of ${paymentAmount} exceeds the required fee of ${expectedFee}`,
+    };
+  }
+  return {
+    status: 'valid',
+    message: 'Payment matches the required fee',
+  };
+}
+
+module.exports = { syncPayments, verifyTransaction, validatePaymentAgainstFee };

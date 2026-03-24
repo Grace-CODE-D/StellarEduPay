@@ -1,74 +1,137 @@
 const Payment = require('../models/paymentModel');
+const PaymentIntent = require('../models/paymentIntentModel');
+const Student = require('../models/studentModel');
 const { syncPayments, verifyTransaction } = require('../services/stellarService');
 const { SCHOOL_WALLET, ACCEPTED_ASSETS } = require('../config/stellarConfig');
+const crypto = require('crypto');
+
+// Tag errors that originate from Stellar network calls
+function wrapStellarError(err) {
+  if (!err.code) {
+    err.code = 'STELLAR_NETWORK_ERROR';
+    err.message = `Stellar network error: ${err.message}`;
+  }
+  return err;
+}
 
 // GET /api/payments/instructions/:studentId
-async function getPaymentInstructions(req, res) {
+async function getPaymentInstructions(req, res, next) {
   try {
-    const { studentId } = req.params;
     res.json({
       walletAddress: SCHOOL_WALLET,
-      memo: studentId,
+      memo: req.params.studentId,
       acceptedAssets: Object.values(ACCEPTED_ASSETS).map(a => ({
         code: a.code,
         type: a.type,
         displayName: a.displayName,
       })),
-      note: 'Include the student ID exactly as the memo when sending payment. Only the listed assets are accepted.',
+      note: 'Include the payment intent memo exactly when sending payment to ensure your fees are credited.',
     });
+  } catch (err) {
+    next(err);
+  }
+}
+
+// POST /api/payments/intent
+async function createPaymentIntent(req, res) {
+  try {
+    const { studentId } = req.body;
+    const student = await Student.findOne({ studentId });
+    if (!student) return res.status(404).json({ error: 'Student not found' });
+
+    // Generate a unique memo for this payment
+    const memo = crypto.randomBytes(4).toString('hex').toUpperCase();
+
+    const intent = await PaymentIntent.create({
+      studentId,
+      amount: student.feeAmount,
+      memo,
+      expiresAt: new Date(Date.now() + 2 * 60 * 60 * 1000), // 2 hours
+    });
+
+    res.status(201).json(intent);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 }
 
 // POST /api/payments/verify
-async function verifyPayment(req, res) {
+async function verifyPayment(req, res, next) {
   try {
     const { txHash } = req.body;
-    const result = await verifyTransaction(txHash);
-    if (!result) return res.status(404).json({ error: 'Payment not found or invalid' });
-    if (result.error === 'unsupported_asset') {
-      return res.status(400).json({
-        error: `Unsupported asset: ${result.assetCode}. Accepted assets: ${Object.keys(ACCEPTED_ASSETS).join(', ')}`,
-      });
+    if (!txHash) {
+      const err = new Error('txHash is required');
+      err.code = 'VALIDATION_ERROR';
+      return next(err);
     }
+
+    const existing = await Payment.findOne({ txHash });
+    if (existing) {
+      const err = new Error(`Transaction ${txHash} has already been processed`);
+      err.code = 'DUPLICATE_TX';
+      return next(err);
+    }
+
+    let result;
+    try {
+      result = await verifyTransaction(txHash);
+    } catch (err) {
+      const failCodes = ['TX_FAILED', 'MISSING_MEMO', 'INVALID_DESTINATION', 'UNSUPPORTED_ASSET'];
+      if (failCodes.includes(err.code)) {
+        await Payment.create({ studentId: 'unknown', txHash, amount: 0, status: 'failed' }).catch(() => {});
+      }
+      return next(failCodes.includes(err.code) ? err : wrapStellarError(err));
+    }
+
+    await recordPayment({
+      studentId: result.memo,
+      txHash: result.hash,
+      amount: result.amount,
+      feeAmount: result.feeAmount,
+      feeValidationStatus: result.feeValidation.status,
+      status: 'confirmed',
+      memo: result.memo,
+      confirmedAt: new Date(result.date),
+    });
+
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 }
 
 // POST /api/payments/sync
-async function syncAllPayments(req, res) {
+async function syncAllPayments(req, res, next) {
   try {
     await syncPayments();
     res.json({ message: 'Sync complete' });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(wrapStellarError(err));
   }
 }
 
 // GET /api/payments/:studentId
-async function getStudentPayments(req, res) {
+async function getStudentPayments(req, res, next) {
   try {
     const payments = await Payment.find({ studentId: req.params.studentId }).sort({ confirmedAt: -1 });
     res.json(payments);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 }
 
 // GET /api/payments/accepted-assets
-async function getAcceptedAssets(req, res) {
+async function getAcceptedAssets(req, res, next) {
   try {
-    const assets = Object.values(ACCEPTED_ASSETS).map(a => ({
-      code: a.code,
-      type: a.type,
-      displayName: a.displayName,
-    }));
-    res.json({ assets });
+    res.json({
+      assets: Object.values(ACCEPTED_ASSETS).map(a => ({
+        code: a.code,
+        type: a.type,
+        displayName: a.displayName,
+      })),
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    next(err);
   }
 }
 
@@ -128,3 +191,13 @@ async function getSuspiciousPayments(req, res) {
 }
 
 module.exports = { getPaymentInstructions, verifyPayment, syncAllPayments, getStudentPayments, getAcceptedAssets, getOverpayments, getStudentBalance, getSuspiciousPayments };
+module.exports = { getPaymentInstructions, verifyPayment, syncAllPayments, getStudentPayments, getAcceptedAssets, getOverpayments, getStudentBalance };
+module.exports = { getPaymentInstructions, verifyPayment, syncAllPayments, getStudentPayments, getAcceptedAssets, getOverpayments };
+module.exports = {
+  getPaymentInstructions,
+  verifyPayment,
+  syncAllPayments,
+  getStudentPayments,
+  getAcceptedAssets,
+  createPaymentIntent,
+};

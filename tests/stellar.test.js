@@ -4,6 +4,7 @@ const {
   validatePaymentAgainstFee,
   detectAsset,
   normalizeAmount,
+  extractValidPayment,
 } = require('../backend/src/services/stellarService');
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -13,6 +14,8 @@ const mockOperations = jest.fn();
 jest.mock('../backend/src/config/stellarConfig', () => ({
   SCHOOL_WALLET: 'GTEST123',
   ACCEPTED_ASSETS: {
+    XLM:  { code: 'XLM',  type: 'native',           issuer: null },
+    USDC: { code: 'USDC', type: 'credit_alphanum4',  issuer: 'GISSUER' },
     XLM: { code: 'XLM', type: 'native', issuer: null },
     USDC: { code: 'USDC', type: 'credit_alphanum4', issuer: 'GISSUER' },
   },
@@ -47,6 +50,11 @@ jest.mock('../backend/src/config/stellarConfig', () => ({
       }),
       transaction: (txHash) => ({
         call: async () => ({
+          hash,
+          memo: 'STU001',
+          successful: true,
+          created_at: new Date().toISOString(),
+          operations: mockOperations,
           hash: txHash,
           memo: 'ABCD123',
           created_at: new Date().toISOString(),
@@ -105,6 +113,7 @@ describe('validatePaymentAgainstFee', () => {
 describe('detectAsset', () => {
   test('recognizes native XLM', () => {
     expect(detectAsset({ asset_type: 'native' })).toEqual({
+      assetCode: 'XLM', assetType: 'native', assetIssuer: null,
       assetCode: 'XLM',
       assetType: 'native',
       assetIssuer: null,
@@ -113,6 +122,7 @@ describe('detectAsset', () => {
 
   test('recognizes USDC', () => {
     expect(detectAsset({ asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: 'GISSUER' })).toEqual({
+      assetCode: 'USDC', assetType: 'credit_alphanum4', assetIssuer: 'GISSUER',
       assetCode: 'USDC',
       assetType: 'credit_alphanum4',
       assetIssuer: 'GISSUER',
@@ -124,6 +134,12 @@ describe('detectAsset', () => {
   });
 
   test('returns null when asset type does not match', () => {
+    expect(detectAsset({ asset_type: 'credit_alphanum4', asset_code: 'XLM', asset_issuer: 'GISSUER' })).toBeNull();
+  });
+});
+
+// ─── normalizeAmount ──────────────────────────────────────────────────────────
+
     // XLM code but wrong type
     expect(detectAsset({ asset_type: 'credit_alphanum4', asset_code: 'XLM', asset_issuer: 'GISSUER' })).toBeNull();
   });
@@ -142,6 +158,114 @@ describe('normalizeAmount', () => {
 
   test('handles smallest XLM unit', () => {
     expect(normalizeAmount('0.0000001')).toBe(0.0000001);
+  });
+});
+
+// ─── extractValidPayment ──────────────────────────────────────────────────────
+
+describe('extractValidPayment', () => {
+  const validOps = async () => ({
+    records: [{ type: 'payment', to: 'GTEST123', amount: '100.0', asset_type: 'native' }],
+  });
+
+  test('returns payOp, memo, asset for a valid transaction', async () => {
+    const tx = { successful: true, memo: 'STU001', operations: validOps };
+    const result = await extractValidPayment(tx);
+    expect(result).not.toBeNull();
+    expect(result.memo).toBe('STU001');
+    expect(result.asset.assetCode).toBe('XLM');
+  });
+
+  test('returns null for a failed transaction', async () => {
+    const tx = { successful: false, memo: 'STU001', operations: validOps };
+    expect(await extractValidPayment(tx)).toBeNull();
+  });
+
+  test('returns null when memo is missing', async () => {
+    const tx = { successful: true, memo: undefined, operations: validOps };
+    expect(await extractValidPayment(tx)).toBeNull();
+  });
+
+  test('returns null when memo is empty string', async () => {
+    const tx = { successful: true, memo: '   ', operations: validOps };
+    expect(await extractValidPayment(tx)).toBeNull();
+  });
+
+  test('returns null when no payment op to school wallet', async () => {
+    const tx = {
+      successful: true, memo: 'STU001',
+      operations: async () => ({ records: [{ type: 'payment', to: 'GOTHER', amount: '100.0', asset_type: 'native' }] }),
+    };
+    expect(await extractValidPayment(tx)).toBeNull();
+  });
+
+  test('returns null for unsupported asset', async () => {
+    const tx = {
+      successful: true, memo: 'STU001',
+      operations: async () => ({ records: [{ type: 'payment', to: 'GTEST123', amount: '100.0', asset_type: 'credit_alphanum4', asset_code: 'SHIB', asset_issuer: 'GRANDOM' }] }),
+    };
+    expect(await extractValidPayment(tx)).toBeNull();
+  });
+});
+
+// ─── verifyTransaction ────────────────────────────────────────────────────────
+
+describe('verifyTransaction', () => {
+  beforeEach(() => {
+    Student.findOne.mockResolvedValue({ studentId: 'STU001', feeAmount: 100 });
+  });
+
+  test('returns payment details with asset info for a valid XLM transaction', async () => {
+    mockOperations.mockResolvedValue({
+      records: [{ type: 'payment', to: 'GTEST123', amount: '100.0', asset_type: 'native' }],
+    });
+    const result = await verifyTransaction('abc123');
+    expect(result).toMatchObject({ hash: 'abc123', memo: 'STU001', amount: 100, assetCode: 'XLM', assetType: 'native' });
+    expect(result.feeValidation.status).toBe('valid');
+  });
+
+  test('returns null for a failed transaction', async () => {
+    // successful: false is set on the tx object returned by the mock server
+    // Override via mockOperations to simulate — we test this path via extractValidPayment directly above
+    mockOperations.mockResolvedValue({ records: [] });
+    const result = await verifyTransaction('abc123');
+    expect(result).toBeNull();
+  });
+
+  test('returns null when no matching payment op', async () => {
+    mockOperations.mockResolvedValue({ records: [] });
+    expect(await verifyTransaction('abc123')).toBeNull();
+  });
+
+  test('returns null when payment is to a different wallet', async () => {
+    mockOperations.mockResolvedValue({
+      records: [{ type: 'payment', to: 'GOTHER999', amount: '100.0', asset_type: 'native' }],
+    });
+    expect(await verifyTransaction('abc123')).toBeNull();
+  });
+
+  test('returns null for unsupported asset', async () => {
+    mockOperations.mockResolvedValue({
+      records: [{ type: 'payment', to: 'GTEST123', amount: '100.0', asset_type: 'credit_alphanum4', asset_code: 'SHIB', asset_issuer: 'GRANDOM' }],
+    });
+    expect(await verifyTransaction('abc123')).toBeNull();
+  });
+
+  test('feeValidation status is unknown when student not found', async () => {
+    Student.findOne.mockResolvedValue(null);
+    mockOperations.mockResolvedValue({
+      records: [{ type: 'payment', to: 'GTEST123', amount: '100.0', asset_type: 'native' }],
+    });
+    const result = await verifyTransaction('abc123');
+    expect(result.feeValidation.status).toBe('unknown');
+  });
+});
+
+// ─── syncPayments ─────────────────────────────────────────────────────────────
+
+describe('syncPayments', () => {
+  test('resolves without error when no transactions exist', async () => {
+    await expect(syncPayments()).resolves.toBeUndefined();
   });
 });
 

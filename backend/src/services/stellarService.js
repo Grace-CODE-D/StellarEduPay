@@ -69,6 +69,7 @@ async function syncPayments() {
       amount: paymentAmount,
       feeAmount: intent.amount,
       feeValidationStatus: feeValidation.status,
+      status: 'confirmed',
       memo,
       confirmedAt: new Date(tx.created_at),
     });

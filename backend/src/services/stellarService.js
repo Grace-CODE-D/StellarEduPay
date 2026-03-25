@@ -72,6 +72,36 @@ async function checkConfirmationStatus(txLedger) {
 }
 
 /**
+ * Parse an incoming Stellar transaction for memo and payment amounts.
+ * If walletAddress is provided, only payments to that wallet are included.
+ */
+async function parseIncomingTransaction(txHash, walletAddress = null) {
+  const tx = await server.transactions().transaction(txHash).call();
+  const memo = tx.memo ? tx.memo.trim() : null;
+
+  const ops = await tx.operations();
+  const payments = ops.records
+    .filter(op => op.type === 'payment' && (!walletAddress || op.to === walletAddress))
+    .map(op => ({
+      from: op.from || null,
+      to: op.to,
+      amount: normalizeAmount(op.amount),
+      assetCode: op.asset_type === 'native' ? 'XLM' : op.asset_code,
+      assetType: op.asset_type,
+      assetIssuer: op.asset_issuer || null,
+    }));
+
+  return {
+    hash: tx.hash,
+    successful: tx.successful,
+    memo,
+    payments,
+    created_at: tx.created_at,
+    ledger: tx.ledger_attr || tx.ledger || null,
+  };
+}
+
+/**
  * Detect memo collision: same memo used by a different sender within 24h,
  * or payment amount is wildly outside the expected fee range.
  * Query is school-scoped via schoolId.
@@ -462,6 +492,7 @@ async function recordPayment(data) {
 module.exports = {
   syncPaymentsForSchool,
   verifyTransaction,
+  parseIncomingTransaction,
   validatePaymentAgainstFee,
   detectAsset,
   normalizeAmount,

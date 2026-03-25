@@ -4,8 +4,10 @@ const express = require('express');
 const router = express.Router();
 const {
   getPaymentInstructions,
+  createPaymentIntent,
   verifyPayment,
   syncAllPayments,
+  finalizePayments,
   getStudentPayments,
   getAcceptedAssets,
   createPaymentIntent,
@@ -15,22 +17,35 @@ const {
   getPendingPayments,
   finalizePayments,
 } = require('../controllers/paymentController');
-const idempotency = require('../middleware/idempotency');
+const { validateStudentIdParam, validateVerifyPayment } = require('../middleware/validate');
 
+// Static routes must come before parameterized ones to avoid route shadowing
+  finalizePayments,
+  getRetryQueue,
+} = require('../controllers/paymentController');
+const { validateStudentIdParam, validateVerifyPayment } = require('../middleware/validate');
+
+// Static routes first (before :studentId wildcard)
 router.get('/accepted-assets', getAcceptedAssets);
 router.get('/overpayments', getOverpayments);
 router.get('/suspicious', getSuspiciousPayments);
 router.get('/pending', getPendingPayments);
-router.get('/balance/:studentId', getStudentBalance);
-router.get('/instructions/:studentId', getPaymentInstructions);
-router.get('/:studentId', getStudentPayments);
+router.get('/balance/:studentId', validateStudentIdParam, getStudentBalance);
+router.get('/instructions/:studentId', validateStudentIdParam, getPaymentInstructions);
 
-// Idempotency enforced on mutating endpoints that create records
-router.post('/intent', idempotency, createPaymentIntent);
-router.post('/verify', idempotency, verifyPayment);
+// POST routes
+router.get('/:studentId', validateStudentIdParam, getStudentPayments);
+router.get('/retry-queue', getRetryQueue);
+router.get('/balance/:studentId', validateStudentIdParam, getStudentBalance);
+router.get('/instructions/:studentId', validateStudentIdParam, getPaymentInstructions);
+router.get('/:studentId', validateStudentIdParam, getStudentPayments);
 
-// Admin/internal — no idempotency key required
+router.post('/intent', createPaymentIntent);
+router.post('/verify', validateVerifyPayment, verifyPayment);
 router.post('/sync', syncAllPayments);
 router.post('/finalize', finalizePayments);
+
+// Parameterized route last to avoid swallowing static paths
+router.get('/:studentId', validateStudentIdParam, getStudentPayments);
 
 module.exports = router;

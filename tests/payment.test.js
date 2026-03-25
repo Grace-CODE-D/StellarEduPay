@@ -23,15 +23,71 @@ jest.mock('../backend/src/models/studentModel', () => ({
   findOneAndUpdate: jest.fn().mockResolvedValue({}),
 }));
 
-jest.mock('../backend/src/models/paymentModel', () => ({
-  find: jest.fn().mockReturnValue({ sort: jest.fn().mockResolvedValue([{ studentId: 'STU001', txHash: 'abc123', amount: 200 }]) }),
-  findOne: jest.fn().mockResolvedValue(null),
-  create: jest.fn().mockResolvedValue({}),
-}));
+jest.mock('../backend/src/models/paymentModel', () => {
+  const mockPayments = [{ studentId: 'STU001', txHash: 'abc123', amount: 200 }];
+  return {
+    find: jest.fn().mockReturnValue({
+      sort: jest.fn().mockReturnValue({
+        lean: jest.fn().mockResolvedValue(mockPayments),
+        then: (fn) => Promise.resolve(mockPayments).then(fn),
+      }),
+    }),
+    findOne: jest.fn().mockResolvedValue(null),
+    create: jest.fn().mockResolvedValue({}),
+    aggregate: jest.fn().mockResolvedValue([]),
+  };
+});
 
 jest.mock('../backend/src/models/paymentIntentModel', () => ({
   create: jest.fn().mockResolvedValue({ studentId: 'STU001', amount: 200, memo: 'ABCD1234', status: 'pending' }),
   findOne: jest.fn().mockResolvedValue({ studentId: 'STU001', amount: 200, memo: 'ABCD1234', status: 'pending' }),
+  findByIdAndUpdate: jest.fn().mockResolvedValue({}),
+}));
+
+jest.mock('../backend/src/models/idempotencyKeyModel', () => ({
+  findOne: jest.fn().mockResolvedValue(null),
+  create: jest.fn().mockResolvedValue({}),
+}));
+
+jest.mock('../backend/src/config/retryQueueSetup', () => ({
+  initializeRetryQueue: jest.fn(),
+  setupMonitoring: jest.fn(),
+}));
+
+jest.mock('../backend/src/services/retryService', () => ({
+  queueForRetry: jest.fn().mockResolvedValue(undefined),
+  startRetryWorker: jest.fn(),
+  stopRetryWorker: jest.fn(),
+  isRetryWorkerRunning: jest.fn().mockReturnValue(false),
+}));
+
+jest.mock('../backend/src/services/transactionService', () => ({
+  startPolling: jest.fn(),
+  stopPolling: jest.fn(),
+}));
+
+jest.mock('../backend/src/services/consistencyScheduler', () => ({
+  startConsistencyScheduler: jest.fn(),
+}));
+
+jest.mock('../backend/src/models/schoolModel', () => ({
+  findOne: jest.fn().mockReturnValue({
+    lean: jest.fn().mockResolvedValue({
+      schoolId: 'SCH001',
+      name: 'Test School',
+      slug: 'test-school',
+      stellarAddress: 'GTEST123',
+      localCurrency: 'USD',
+      isActive: true,
+    }),
+  }),
+  create: jest.fn().mockResolvedValue({}),
+}));
+
+jest.mock('../backend/src/models/pendingVerificationModel', () => ({
+  find: jest.fn().mockReturnValue({ sort: jest.fn().mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }) }),
+  findOne: jest.fn().mockResolvedValue(null),
+  findOneAndUpdate: jest.fn().mockResolvedValue({}),
   findByIdAndUpdate: jest.fn().mockResolvedValue({}),
 }));
 
@@ -53,8 +109,17 @@ jest.mock('../backend/src/models/feeStructureModel', () => {
   };
 });
 
+jest.mock('../backend/src/services/currencyConversionService', () => ({
+  convertToLocalCurrency: jest.fn().mockResolvedValue({
+    available: true, localAmount: 100, currency: 'USD', rate: 0.5, rateTimestamp: new Date().toISOString(),
+  }),
+  enrichPaymentWithConversion: jest.fn().mockImplementation((p) => Promise.resolve({ ...p, localCurrency: { available: false } })),
+  _getRates: jest.fn().mockResolvedValue(null),
+}));
+
 jest.mock('../backend/src/services/stellarService', () => ({
   syncPayments: jest.fn().mockResolvedValue(undefined),
+  syncPaymentsForSchool: jest.fn().mockResolvedValue(undefined),
   verifyTransaction: jest.fn().mockResolvedValue({
     hash: 'abc123',
     memo: 'ABCD1234',
@@ -69,6 +134,17 @@ jest.mock('../backend/src/services/stellarService', () => ({
 
 const app = require('../backend/src/app');
 
+// Helper: supertest wrapper that always sends the X-School-ID header
+function api(app) {
+  const agent = request(app);
+  const wrap = (method) => (...args) => {
+    const req = agent[method](...args);
+    return req.set('X-School-ID', 'SCH001');
+  };
+  return { get: wrap('get'), post: wrap('post'), put: wrap('put'), delete: wrap('delete') };
+}
+const testApi = api(app);
+
 // ─── Full Payment Flow ────────────────────────────────────────────────────────
 
 describe('Full payment flow', () => {
@@ -76,7 +152,7 @@ describe('Full payment flow', () => {
     const Student = require('../backend/src/models/studentModel');
     Student.findOne.mockResolvedValueOnce(null); // no exact duplicate
     Student.findOne.mockResolvedValueOnce(null); // no fuzzy duplicate
-    const res = await request(app).post('/api/students').send({
+    const res = await testApi.post('/api/students').send({
       studentId: 'STU001', name: 'Alice', class: '5A', feeAmount: 200,
     });
     expect(res.status).toBe(201);
@@ -84,7 +160,7 @@ describe('Full payment flow', () => {
   });
 
   test('Step 2 — get payment instructions', async () => {
-    const res = await request(app).get('/api/payments/instructions/STU001');
+    const res = await testApi.get('/api/payments/instructions/STU001');
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('memo', 'STU001');
     expect(res.body).toHaveProperty('note');
@@ -93,13 +169,15 @@ describe('Full payment flow', () => {
 
   test('Step 3 — verify transaction after payment', async () => {
     const txHash = 'a'.repeat(64);
-    const res = await request(app).post('/api/payments/verify').send({ txHash });
+    const res = await testApi.post('/api/payments/verify')
+      .set('Idempotency-Key', 'flow-verify-abc123')
+      .send({ txHash });
     expect(res.status).toBe(200);
     expect(res.body.feeValidation.status).toBe('valid');
   });
 
   test('Step 4 — payment history reflects the transaction', async () => {
-    const res = await request(app).get('/api/payments/STU001');
+    const res = await testApi.get('/api/payments/STU001');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body[0]).toHaveProperty('txHash', 'abc123');
@@ -113,7 +191,7 @@ describe('Student API', () => {
     const Student = require('../backend/src/models/studentModel');
     Student.findOne.mockResolvedValueOnce(null); // no exact duplicate
     Student.findOne.mockResolvedValueOnce(null); // no fuzzy duplicate
-    const res = await request(app).post('/api/students').send({
+    const res = await testApi.post('/api/students').send({
       studentId: 'STU001', name: 'Alice', class: '5A', feeAmount: 200,
     });
     expect(res.status).toBe(201);
@@ -121,13 +199,13 @@ describe('Student API', () => {
   });
 
   test('GET /api/students — returns all students', async () => {
-    const res = await request(app).get('/api/students');
+    const res = await testApi.get('/api/students');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
   });
 
   test('GET /api/students/:studentId — returns a student', async () => {
-    const res = await request(app).get('/api/students/STU001');
+    const res = await testApi.get('/api/students/STU001');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ studentId: 'STU001', feeAmount: 200 });
   });
@@ -135,7 +213,7 @@ describe('Student API', () => {
   test('GET /api/students/:studentId — 404 for unknown student', async () => {
     const Student = require('../backend/src/models/studentModel');
     Student.findOne.mockResolvedValueOnce(null);
-    const res = await request(app).get('/api/students/UNKNOWN');
+    const res = await testApi.get('/api/students/UNKNOWN');
     expect(res.status).toBe(404);
   });
 });
@@ -144,7 +222,7 @@ describe('Student API', () => {
 
 describe('Payment API', () => {
   test('POST /api/payments/sync — returns success', async () => {
-    const res = await request(app).post('/api/payments/sync');
+    const res = await testApi.post('/api/payments/sync');
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('message', 'Sync complete');
   });
@@ -153,13 +231,15 @@ describe('Payment API', () => {
     const Payment = require('../backend/src/models/paymentModel');
     const txHash = 'b'.repeat(64);
     Payment.findOne.mockResolvedValueOnce({ txHash });
-    const res = await request(app).post('/api/payments/verify').send({ txHash });
+    const res = await testApi.post('/api/payments/verify')
+      .set('Idempotency-Key', 'test-verify-dup')
+      .send({ txHash });
     expect(res.status).toBe(409);
     expect(res.body).toHaveProperty('code', 'DUPLICATE_TX');
   });
 
   test('GET /api/payments/accepted-assets — returns XLM and USDC', async () => {
-    const res = await request(app).get('/api/payments/accepted-assets');
+    const res = await testApi.get('/api/payments/accepted-assets');
     expect(res.status).toBe(200);
     expect(res.body.assets.map(a => a.code)).toEqual(expect.arrayContaining(['XLM', 'USDC']));
   });
@@ -169,32 +249,32 @@ describe('Payment API', () => {
 
 describe('Fee Structure API', () => {
   test('POST /api/fees — creates a fee structure', async () => {
-    const res = await request(app).post('/api/fees').send({ className: '5A', feeAmount: 200 });
+    const res = await testApi.post('/api/fees').send({ className: '5A', feeAmount: 200 });
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ className: '5A', feeAmount: 200 });
   });
 
   test('POST /api/fees — 400 when required fields missing', async () => {
-    const res = await request(app).post('/api/fees').send({ description: 'No class' });
+    const res = await testApi.post('/api/fees').send({ description: 'No class' });
     expect(res.status).toBe(400);
     expect(res.body).toHaveProperty('errors');
   });
 
   test('GET /api/fees — returns all fee structures', async () => {
-    const res = await request(app).get('/api/fees');
+    const res = await testApi.get('/api/fees');
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
     expect(res.body.length).toBeGreaterThanOrEqual(1);
   });
 
   test('GET /api/fees/:className — returns fee for class', async () => {
-    const res = await request(app).get('/api/fees/5A');
+    const res = await testApi.get('/api/fees/5A');
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ className: '5A', feeAmount: 200 });
   });
 
   test('GET /api/fees/:className — 404 for unknown class', async () => {
-    const res = await request(app).get('/api/fees/UNKNOWN');
+    const res = await testApi.get('/api/fees/UNKNOWN');
     expect(res.status).toBe(404);
   });
 });
@@ -203,7 +283,9 @@ describe('Fee Structure API', () => {
 
 describe('Payment Intent API', () => {
   test('POST /api/payments/intent — creates a payment intent', async () => {
-    const res = await request(app).post('/api/payments/intent').send({ studentId: 'STU001' });
+    const res = await testApi.post('/api/payments/intent')
+      .set('Idempotency-Key', 'test-intent-stu001')
+      .send({ studentId: 'STU001' });
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty('memo');
     expect(res.body).toHaveProperty('amount', 200);
@@ -213,7 +295,9 @@ describe('Payment Intent API', () => {
   test('POST /api/payments/intent — 404 for unknown student', async () => {
     const Student = require('../backend/src/models/studentModel');
     Student.findOne.mockResolvedValueOnce(null);
-    const res = await request(app).post('/api/payments/intent').send({ studentId: 'UNKNOWN' });
+    const res = await testApi.post('/api/payments/intent')
+      .set('Idempotency-Key', 'test-intent-unknown')
+      .send({ studentId: 'UNKNOWN' });
     expect(res.status).toBe(404);
   });
 });
@@ -226,7 +310,7 @@ describe('Duplicate Student Detection', () => {
     Student.findOne.mockResolvedValueOnce({
       studentId: 'STU001', name: 'Alice', class: '5A', feeAmount: 200,
     });
-    const res = await request(app).post('/api/students').send({
+    const res = await testApi.post('/api/students').send({
       studentId: 'STU001', name: 'Bob', class: '5A', feeAmount: 200,
     });
     expect(res.status).toBe(409);
@@ -243,7 +327,7 @@ describe('Duplicate Student Detection', () => {
       studentId: 'STU002', name: 'Alice', class: '5A', feeAmount: 200,
       toObject() { return { studentId: 'STU002', name: 'Alice', class: '5A', feeAmount: 200 }; },
     });
-    const res = await request(app).post('/api/students').send({
+    const res = await testApi.post('/api/students').send({
       studentId: 'STU002', name: 'Alice', class: '5A', feeAmount: 200,
     });
     expect(res.status).toBe(201);
@@ -258,7 +342,7 @@ describe('Duplicate Student Detection', () => {
     Student.create.mockResolvedValueOnce({
       studentId: 'STU999', name: 'Unique', class: '7A', feeAmount: 300,
     });
-    const res = await request(app).post('/api/students').send({
+    const res = await testApi.post('/api/students').send({
       studentId: 'STU999', name: 'Unique', class: '7A', feeAmount: 300,
     });
     expect(res.status).toBe(201);
@@ -272,10 +356,93 @@ describe('Duplicate Student Detection', () => {
     const mongoErr = new Error('E11000 duplicate key');
     mongoErr.code = 11000;
     Student.create.mockRejectedValueOnce(mongoErr);
-    const res = await request(app).post('/api/students').send({
+    const res = await testApi.post('/api/students').send({
       studentId: 'STU001', name: 'Alice', class: '5A', feeAmount: 200,
     });
     expect(res.status).toBe(409);
     expect(res.body).toHaveProperty('code', 'DUPLICATE_STUDENT');
+  });
+});
+
+// ─── Idempotency ──────────────────────────────────────────────────────────────
+
+describe('Idempotency', () => {
+  let IdempotencyKey;
+
+  beforeEach(() => {
+    IdempotencyKey = require('../backend/src/models/idempotencyKeyModel');
+    IdempotencyKey.findOne.mockResolvedValue(null);
+    IdempotencyKey.create.mockResolvedValue({});
+  });
+
+  test('POST /api/payments/intent — 400 when Idempotency-Key header is missing', async () => {
+    const res = await testApi.post('/api/payments/intent').send({ studentId: 'STU001' });
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('code', 'MISSING_IDEMPOTENCY_KEY');
+  });
+
+  test('POST /api/payments/verify — 400 when Idempotency-Key header is missing', async () => {
+    const res = await testApi.post('/api/payments/verify').send({ txHash: 'abc123' });
+    expect(res.status).toBe(400);
+    expect(res.body).toHaveProperty('code', 'MISSING_IDEMPOTENCY_KEY');
+  });
+
+  test('POST /api/payments/intent — returns cached response on duplicate key', async () => {
+    const cachedBody = { studentId: 'STU001', amount: 200, memo: 'CACHED1', status: 'pending' };
+    IdempotencyKey.findOne.mockResolvedValueOnce({
+      key: 'dupe-intent-key',
+      requestPath: '/intent',
+      responseStatus: 201,
+      responseBody: cachedBody,
+    });
+
+    const PaymentIntent = require('../backend/src/models/paymentIntentModel');
+    PaymentIntent.create.mockClear();
+
+    const res = await testApi.post('/api/payments/intent')
+      .set('Idempotency-Key', 'dupe-intent-key')
+      .send({ studentId: 'STU001' });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toEqual(cachedBody);
+    expect(PaymentIntent.create).not.toHaveBeenCalled();
+  });
+
+  test('POST /api/payments/verify — returns cached response on duplicate key', async () => {
+    const cachedBody = { hash: 'abc123', memo: 'STU001', amount: 200, feeValidation: { status: 'valid' } };
+    IdempotencyKey.findOne.mockResolvedValueOnce({
+      key: 'dupe-verify-key',
+      requestPath: '/verify',
+      responseStatus: 200,
+      responseBody: cachedBody,
+    });
+
+    const res = await testApi.post('/api/payments/verify')
+      .set('Idempotency-Key', 'dupe-verify-key')
+      .send({ txHash: 'abc123' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(cachedBody);
+  });
+
+  test('POST /api/payments/intent — caches response after first successful call', async () => {
+    IdempotencyKey.create.mockClear();
+
+    await testApi.post('/api/payments/intent')
+      .set('Idempotency-Key', 'new-intent-key')
+      .send({ studentId: 'STU001' });
+
+    expect(IdempotencyKey.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        key: 'new-intent-key',
+        requestPath: '/intent',
+        responseStatus: 201,
+      })
+    );
+  });
+
+  test('POST /api/payments/sync — does NOT require Idempotency-Key', async () => {
+    const res = await testApi.post('/api/payments/sync');
+    expect(res.status).toBe(200);
   });
 });

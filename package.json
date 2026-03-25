@@ -15,5 +15,10 @@
       "node_modules",
       "backend/node_modules"
     ]
+  },
+  "dependencies": {
+    "bullmq": "^5.71.1",
+    "ioredis": "^5.10.1",
+    "node-cache": "^5.1.2"
   }
 }

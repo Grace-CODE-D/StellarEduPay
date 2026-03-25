@@ -10,30 +10,38 @@ const {
   finalizePayments,
   getStudentPayments,
   getAcceptedAssets,
+  getPaymentLimitsEndpoint,
   getOverpayments,
   getStudentBalance,
   getSuspiciousPayments,
   getPendingPayments,
   getRetryQueue,
+  getExchangeRates,
 } = require('../controllers/paymentController');
 const { validateStudentIdParam, validateVerifyPayment } = require('../middleware/validate');
+const { resolveSchool } = require('../middleware/schoolContext');
+const idempotency = require('../middleware/idempotency');
 
-// Static routes first (before :studentId wildcard)
-router.get('/accepted-assets', getAcceptedAssets);
-router.get('/overpayments', getOverpayments);
-router.get('/suspicious', getSuspiciousPayments);
-router.get('/pending', getPendingPayments);
-router.get('/retry-queue', getRetryQueue);
-router.get('/balance/:studentId', validateStudentIdParam, getStudentBalance);
-router.get('/instructions/:studentId', validateStudentIdParam, getPaymentInstructions);
+// All payment routes require school context
+router.use(resolveSchool);
 
-// POST routes
-router.post('/intent', createPaymentIntent);
-router.post('/verify', validateVerifyPayment, verifyPayment);
-router.post('/sync', syncAllPayments);
-router.post('/finalize', finalizePayments);
+// Static routes before parameterized ones
+router.get('/accepted-assets',                    getAcceptedAssets);
+router.get('/limits',                             getPaymentLimitsEndpoint);
+router.get('/overpayments',                       getOverpayments);
+router.get('/suspicious',                         getSuspiciousPayments);
+router.get('/pending',                            getPendingPayments);
+router.get('/retry-queue',                        getRetryQueue);
+router.get('/rates',                              getExchangeRates);
+router.get('/balance/:studentId',                 validateStudentIdParam, getStudentBalance);
+router.get('/instructions/:studentId',            validateStudentIdParam, getPaymentInstructions);
 
-// Parameterized route last to avoid swallowing static paths
-router.get('/:studentId', validateStudentIdParam, getStudentPayments);
+router.post('/intent',                            idempotency, createPaymentIntent);
+router.post('/verify',                            idempotency, validateVerifyPayment, verifyPayment);
+router.post('/sync',                              syncAllPayments);
+router.post('/finalize',                          finalizePayments);
+
+// Parameterized route last
+router.get('/:studentId',                         validateStudentIdParam, getStudentPayments);
 
 module.exports = router;

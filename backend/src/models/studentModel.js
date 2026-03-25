@@ -8,7 +8,8 @@ const studentSchema = new mongoose.Schema({
   feePaid: { type: Boolean, default: false, index: true },
   totalPaid: { type: Number, default: 0 },
   remainingBalance: { type: Number, default: null },
-  feePaid: { type: Boolean, default: false },
 }, { timestamps: true });
+
+studentSchema.index({ name: 1, class: 1 });
 
 module.exports = mongoose.model('Student', studentSchema);

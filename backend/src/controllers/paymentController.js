@@ -1,22 +1,7 @@
 'use strict';
 
-const Payment = require('../models/paymentModel');
-const PaymentIntent = require('../models/paymentIntentModel');
-const Student = require('../models/studentModel');
-const { syncPayments, verifyTransaction, finalizeConfirmedPayments } = require('../services/stellarService');
 const crypto = require('crypto');
 const Payment = require('../models/paymentModel');
-const PaymentIntent = require('../models/paymentIntentModel');
-const Student = require('../models/studentModel');
-const {
-  syncPayments,
-  verifyTransaction,
-  recordPayment,
-  finalizeConfirmedPayments,
-} = require('../services/stellarService');
-const Student = require('../models/studentModel');
-const PaymentIntent = require('../models/paymentIntentModel');
-const { syncPayments, verifyTransaction, recordPayment, finalizeConfirmedPayments } = require('../services/stellarService');
 const PaymentIntent = require('../models/paymentIntentModel');
 const Student = require('../models/studentModel');
 const PendingVerification = require('../models/pendingVerificationModel');
@@ -103,8 +88,7 @@ async function verifyPayment(req, res, next) {
   try {
     const { txHash } = req.body;
 
-    // Check if we've already recorded this transaction
-    // Check for already-processed or already-queued transactions
+    // Check for already-processed transactions
     const existing = await Payment.findOne({ txHash });
     if (existing) {
       const err = new Error(`Transaction ${txHash} has already been processed`);
@@ -116,44 +100,7 @@ async function verifyPayment(req, res, next) {
     let result;
     try {
       result = await verifyTransaction(txHash);
-    } catch (stellarErr) {
-      const knownFailCodes = ['TX_FAILED', 'MISSING_MEMO', 'INVALID_DESTINATION', 'UNSUPPORTED_ASSET'];
-      // Record a failed payment entry for known failure codes so we have an audit trail
-      if (knownFailCodes.includes(stellarErr.code)) {
-        await Payment.create({
-          studentId: 'unknown',
-          txHash,
-          amount: 0,
-          status: 'failed',
-          feeValidationStatus: 'unknown',
-        }).catch(() => {}); // non-fatal — don't mask the original error
-      }
-      return next(knownFailCodes.includes(stellarErr.code) ? stellarErr : wrapStellarError(stellarErr));
-    }
-
-    // verifyTransaction returns null if the tx exists but has no valid payment to the school wallet
-    if (!result) {
-      return res.status(404).json({
-        error: 'Transaction found but contains no valid payment to the school wallet',
-        code: 'NOT_FOUND',
-      });
-    }
-
-    // Persist the verified payment
-    await recordPayment({
-      studentId: result.studentId,
     } catch (err) {
-      const failCodes = ['TX_FAILED', 'MISSING_MEMO', 'INVALID_DESTINATION', 'UNSUPPORTED_ASSET'];
-      if (failCodes.includes(err.code)) {
-        // Record a failed payment for audit purposes
-        await Payment.create({
-          studentId: 'unknown',
-          txHash,
-          transactionHash: txHash,
-          amount: 0,
-          status: 'failed',
-          createdAt: new Date(),
-        }).catch(() => {});
       if (PERMANENT_FAIL_CODES.includes(err.code)) {
         // Permanently invalid — record as failed and surface the error
         await Payment.create({ studentId: 'unknown', txHash, amount: 0, status: 'failed' }).catch(() => {});
@@ -169,24 +116,20 @@ async function verifyPayment(req, res, next) {
       });
     }
 
+    // verifyTransaction returns null if the tx exists but has no valid payment to the school wallet
     if (!result) {
-      return res.status(404).json({ error: 'Transaction not found or invalid' });
+      return res.status(404).json({
+        error: 'Transaction found but contains no valid payment to the school wallet',
+        code: 'NOT_FOUND',
+      });
     }
 
-    if (!result) {
-      const err = new Error('Transaction not found or invalid');
-      err.code = 'NOT_FOUND';
-      err.status = 404;
-      return next(err);
-    }
-    const now = new Date();
-
+    // Persist the verified payment
     await recordPayment({
       studentId: result.studentId || result.memo,
       txHash: result.hash,
-      transactionHash: result.hash,   // audit: canonical on-chain reference
       amount: result.amount,
-      feeAmount: result.expectedAmount || result.feeAmount,
+      feeAmount: result.feeAmount,
       feeValidationStatus: result.feeValidation.status,
       excessAmount: result.feeValidation.excessAmount,
       status: 'confirmed',
@@ -194,10 +137,8 @@ async function verifyPayment(req, res, next) {
       senderAddress: result.senderAddress || null,
       ledger: result.ledger || null,
       confirmationStatus: 'confirmed',
-      confirmedAt: new Date(result.date),
-      confirmedAt: new Date(result.date), // audit: ledger confirmation time
-      verifiedAt: now,                    // audit: when this endpoint was called
       confirmedAt: result.date ? new Date(result.date) : new Date(),
+      verifiedAt: new Date(),
     });
 
     res.json({
@@ -224,8 +165,6 @@ async function syncAllPayments(req, res, next) {
     res.json({ message: 'Sync complete' });
   } catch (err) {
     const wrapped = wrapStellarError(err);
-    // If the sync itself fails due to a network outage, report it clearly
-    // (individual tx caching happens inside stellarService during sync)
     next(wrapped);
   }
 }
@@ -360,6 +299,5 @@ module.exports = {
   getStudentBalance,
   getSuspiciousPayments,
   getPendingPayments,
-  finalizePayments,
   getRetryQueue,
 };

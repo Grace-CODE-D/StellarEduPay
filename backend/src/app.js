@@ -39,6 +39,7 @@ app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
     INVALID_DESTINATION: 400,
     UNSUPPORTED_ASSET: 400,
     DUPLICATE_TX: 409,
+    DUPLICATE_STUDENT: 409,
     NOT_FOUND: 404,
     VALIDATION_ERROR: 400,
     STELLAR_NETWORK_ERROR: 502,

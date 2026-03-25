@@ -73,6 +73,9 @@ const app = require('../backend/src/app');
 
 describe('Full payment flow', () => {
   test('Step 1 — register student', async () => {
+    const Student = require('../backend/src/models/studentModel');
+    Student.findOne.mockResolvedValueOnce(null); // no exact duplicate
+    Student.findOne.mockResolvedValueOnce(null); // no fuzzy duplicate
     const res = await request(app).post('/api/students').send({
       studentId: 'STU001', name: 'Alice', class: '5A', feeAmount: 200,
     });
@@ -89,7 +92,8 @@ describe('Full payment flow', () => {
   });
 
   test('Step 3 — verify transaction after payment', async () => {
-    const res = await request(app).post('/api/payments/verify').send({ txHash: 'abc123' });
+    const txHash = 'a'.repeat(64);
+    const res = await request(app).post('/api/payments/verify').send({ txHash });
     expect(res.status).toBe(200);
     expect(res.body.feeValidation.status).toBe('valid');
   });
@@ -106,6 +110,9 @@ describe('Full payment flow', () => {
 
 describe('Student API', () => {
   test('POST /api/students — creates a student', async () => {
+    const Student = require('../backend/src/models/studentModel');
+    Student.findOne.mockResolvedValueOnce(null); // no exact duplicate
+    Student.findOne.mockResolvedValueOnce(null); // no fuzzy duplicate
     const res = await request(app).post('/api/students').send({
       studentId: 'STU001', name: 'Alice', class: '5A', feeAmount: 200,
     });
@@ -144,8 +151,9 @@ describe('Payment API', () => {
 
   test('POST /api/payments/verify — returns 409 for duplicate transaction', async () => {
     const Payment = require('../backend/src/models/paymentModel');
-    Payment.findOne.mockResolvedValueOnce({ txHash: 'abc123' });
-    const res = await request(app).post('/api/payments/verify').send({ txHash: 'abc123' });
+    const txHash = 'b'.repeat(64);
+    Payment.findOne.mockResolvedValueOnce({ txHash });
+    const res = await request(app).post('/api/payments/verify').send({ txHash });
     expect(res.status).toBe(409);
     expect(res.body).toHaveProperty('code', 'DUPLICATE_TX');
   });
@@ -207,5 +215,67 @@ describe('Payment Intent API', () => {
     Student.findOne.mockResolvedValueOnce(null);
     const res = await request(app).post('/api/payments/intent').send({ studentId: 'UNKNOWN' });
     expect(res.status).toBe(404);
+  });
+});
+
+// ─── Duplicate Student Detection ─────────────────────────────────────────────
+
+describe('Duplicate Student Detection', () => {
+  test('POST /api/students — 409 for duplicate studentId', async () => {
+    const Student = require('../backend/src/models/studentModel');
+    Student.findOne.mockResolvedValueOnce({
+      studentId: 'STU001', name: 'Alice', class: '5A', feeAmount: 200,
+    });
+    const res = await request(app).post('/api/students').send({
+      studentId: 'STU001', name: 'Bob', class: '5A', feeAmount: 200,
+    });
+    expect(res.status).toBe(409);
+    expect(res.body).toHaveProperty('code', 'DUPLICATE_STUDENT');
+  });
+
+  test('POST /api/students — 201 with warning for same name+class', async () => {
+    const Student = require('../backend/src/models/studentModel');
+    Student.findOne.mockResolvedValueOnce(null); // no exact match
+    Student.findOne.mockResolvedValueOnce({      // fuzzy match found
+      studentId: 'STU001', name: 'Alice', class: '5A',
+    });
+    Student.create.mockResolvedValueOnce({
+      studentId: 'STU002', name: 'Alice', class: '5A', feeAmount: 200,
+      toObject() { return { studentId: 'STU002', name: 'Alice', class: '5A', feeAmount: 200 }; },
+    });
+    const res = await request(app).post('/api/students').send({
+      studentId: 'STU002', name: 'Alice', class: '5A', feeAmount: 200,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body).toHaveProperty('warning');
+    expect(res.body.warning).toMatch(/already exists/);
+  });
+
+  test('POST /api/students — 201 without warning for unique student', async () => {
+    const Student = require('../backend/src/models/studentModel');
+    Student.findOne.mockResolvedValueOnce(null); // no exact match
+    Student.findOne.mockResolvedValueOnce(null); // no fuzzy match
+    Student.create.mockResolvedValueOnce({
+      studentId: 'STU999', name: 'Unique', class: '7A', feeAmount: 300,
+    });
+    const res = await request(app).post('/api/students').send({
+      studentId: 'STU999', name: 'Unique', class: '7A', feeAmount: 300,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body).not.toHaveProperty('warning');
+  });
+
+  test('POST /api/students — 409 when MongoDB throws duplicate key error', async () => {
+    const Student = require('../backend/src/models/studentModel');
+    Student.findOne.mockResolvedValueOnce(null); // race condition: no match found
+    Student.findOne.mockResolvedValueOnce(null); // no fuzzy match
+    const mongoErr = new Error('E11000 duplicate key');
+    mongoErr.code = 11000;
+    Student.create.mockRejectedValueOnce(mongoErr);
+    const res = await request(app).post('/api/students').send({
+      studentId: 'STU001', name: 'Alice', class: '5A', feeAmount: 200,
+    });
+    expect(res.status).toBe(409);
+    expect(res.body).toHaveProperty('code', 'DUPLICATE_STUDENT');
   });
 });

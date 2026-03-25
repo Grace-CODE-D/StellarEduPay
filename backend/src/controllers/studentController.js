@@ -6,6 +6,21 @@ async function registerStudent(req, res, next) {
   try {
     const { studentId, name, class: className, feeAmount } = req.body;
 
+    // Exact duplicate check by studentId
+    const existingStudent = await Student.findOne({ studentId });
+    if (existingStudent) {
+      const err = new Error(`A student with ID "${studentId}" already exists`);
+      err.code = 'DUPLICATE_STUDENT';
+      return next(err);
+    }
+
+    // Fuzzy duplicate check (same name + class, case-insensitive)
+    const escapedName = name.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const similarStudent = await Student.findOne({
+      name: { $regex: new RegExp(`^${escapedName}$`, 'i') },
+      class: className,
+    });
+
     let assignedFee = feeAmount;
     if (assignedFee == null && className) {
       const feeStructure = await FeeStructure.findOne({ className, isActive: true });
@@ -19,8 +34,18 @@ async function registerStudent(req, res, next) {
     }
 
     const student = await Student.create({ studentId, name, class: className, feeAmount: assignedFee });
-    res.status(201).json(student);
+
+    const response = student.toObject ? student.toObject() : { ...student };
+    if (similarStudent) {
+      response.warning = `A student named "${similarStudent.name}" already exists in class ${className} with ID "${similarStudent.studentId}". This may be a duplicate.`;
+    }
+    res.status(201).json(response);
   } catch (err) {
+    if (err.code === 11000) {
+      const dupErr = new Error('A student with this ID already exists');
+      dupErr.code = 'DUPLICATE_STUDENT';
+      return next(dupErr);
+    }
     next(err);
   }
 }

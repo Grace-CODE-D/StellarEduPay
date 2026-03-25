@@ -10,17 +10,10 @@ const {
   finalizePayments,
   getStudentPayments,
   getAcceptedAssets,
-  createPaymentIntent,
   getOverpayments,
   getStudentBalance,
   getSuspiciousPayments,
   getPendingPayments,
-  finalizePayments,
-} = require('../controllers/paymentController');
-const { validateStudentIdParam, validateVerifyPayment } = require('../middleware/validate');
-
-// Static routes must come before parameterized ones to avoid route shadowing
-  finalizePayments,
   getRetryQueue,
 } = require('../controllers/paymentController');
 const { validateStudentIdParam, validateVerifyPayment } = require('../middleware/validate');
@@ -30,16 +23,11 @@ router.get('/accepted-assets', getAcceptedAssets);
 router.get('/overpayments', getOverpayments);
 router.get('/suspicious', getSuspiciousPayments);
 router.get('/pending', getPendingPayments);
+router.get('/retry-queue', getRetryQueue);
 router.get('/balance/:studentId', validateStudentIdParam, getStudentBalance);
 router.get('/instructions/:studentId', validateStudentIdParam, getPaymentInstructions);
 
 // POST routes
-router.get('/:studentId', validateStudentIdParam, getStudentPayments);
-router.get('/retry-queue', getRetryQueue);
-router.get('/balance/:studentId', validateStudentIdParam, getStudentBalance);
-router.get('/instructions/:studentId', validateStudentIdParam, getPaymentInstructions);
-router.get('/:studentId', validateStudentIdParam, getStudentPayments);
-
 router.post('/intent', createPaymentIntent);
 router.post('/verify', validateVerifyPayment, verifyPayment);
 router.post('/sync', syncAllPayments);

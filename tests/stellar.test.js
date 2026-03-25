@@ -201,23 +201,23 @@ describe('verifyTransaction', () => {
     expect(result.feeValidation.status).toBe('valid');
   });
 
-  test('returns null when no matching payment op', async () => {
+  test('throws INVALID_DESTINATION when no matching payment op', async () => {
     mockOperations.mockResolvedValue({ records: [] });
-    expect(await verifyTransaction('abc123')).toBeNull();
+    await expect(verifyTransaction('abc123')).rejects.toMatchObject({ code: 'INVALID_DESTINATION' });
   });
 
-  test('returns null when payment is to a different wallet', async () => {
+  test('throws INVALID_DESTINATION when payment is to a different wallet', async () => {
     mockOperations.mockResolvedValue({
       records: [{ type: 'payment', to: 'GOTHER999', amount: '100.0', asset_type: 'native' }],
     });
-    expect(await verifyTransaction('abc123')).toBeNull();
+    await expect(verifyTransaction('abc123')).rejects.toMatchObject({ code: 'INVALID_DESTINATION' });
   });
 
-  test('returns null for unsupported asset', async () => {
+  test('throws UNSUPPORTED_ASSET for unsupported asset', async () => {
     mockOperations.mockResolvedValue({
       records: [{ type: 'payment', to: 'GTEST123', amount: '100.0', asset_type: 'credit_alphanum4', asset_code: 'SHIB', asset_issuer: 'GRANDOM' }],
     });
-    expect(await verifyTransaction('abc123')).toBeNull();
+    await expect(verifyTransaction('abc123')).rejects.toMatchObject({ code: 'UNSUPPORTED_ASSET' });
   });
 
   test('feeValidation status is unknown when student not found', async () => {

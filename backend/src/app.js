@@ -1,9 +1,17 @@
+'use strict';
+
 require('dotenv').config();
 const config = require('./config');
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
 
+const schoolRoutes   = require('./routes/schoolRoutes');
+const studentRoutes  = require('./routes/studentRoutes');
+const paymentRoutes  = require('./routes/paymentRoutes');
+const feeRoutes      = require('./routes/feeRoutes');
+const reportRoutes   = require('./routes/reportRoutes');
+const { startPolling }     = require('./services/transactionService');
 const studentRoutes = require('./routes/studentRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const feeRoutes = require('./routes/feeRoutes');
@@ -39,6 +47,14 @@ mongoose.connect(config.MONGO_URI)
   })
   .catch(err => console.error('MongoDB error:', err));
 
+// Schools — no school context needed (these ARE schools)
+app.use('/api/schools',   schoolRoutes);
+
+// All other routes are school-scoped (resolveSchool middleware is applied in each router)
+app.use('/api/students',  studentRoutes);
+app.use('/api/payments',  paymentRoutes);
+app.use('/api/fees',      feeRoutes);
+app.use('/api/reports',   reportRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/fees', feeRoutes);
@@ -47,9 +63,21 @@ app.use('/api/reports', reportRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
-// Global error handler — all controllers forward errors here via next(err)
+// Global error handler
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   const statusMap = {
+    TX_FAILED:            400,
+    MISSING_MEMO:         400,
+    INVALID_DESTINATION:  400,
+    UNSUPPORTED_ASSET:    400,
+    VALIDATION_ERROR:     400,
+    MISSING_SCHOOL_CONTEXT: 400,
+    DUPLICATE_TX:         409,
+    DUPLICATE_SCHOOL:     409,
+    DUPLICATE_STUDENT:    409,
+    NOT_FOUND:            404,
+    SCHOOL_NOT_FOUND:     404,
+    STELLAR_NETWORK_ERROR:502,
     TX_FAILED: 400,
     MISSING_MEMO: 400,
     INVALID_DESTINATION: 400,

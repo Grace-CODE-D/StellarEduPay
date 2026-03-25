@@ -18,7 +18,12 @@ const {
   getRetryQueue,
 } = require('../controllers/paymentController');
 
-const { validateStudentIdParam, validateVerifyPayment } = require('../middleware/validate');
+const {
+  validateStudentIdParam,
+  validateCreatePaymentIntent,
+  validateSubmitTransaction,
+  validateVerifyPayment,
+} = require('../middleware/validate');
 
 // Static routes first (before :studentId wildcard)
 router.get('/accepted-assets', getAcceptedAssets);
@@ -27,16 +32,17 @@ router.get('/suspicious', getSuspiciousPayments);
 router.get('/pending', getPendingPayments);
 router.get('/retry-queue', getRetryQueue);
 
-// POST routes
-router.post('/intent', createPaymentIntent);
-router.post('/submit', submitTransaction);
-router.post('/verify', validateVerifyPayment, verifyPayment);
-router.post('/sync', syncAllPayments);
+// POST routes — all mutating endpoints are gated by input validation
+router.post('/intent',   validateCreatePaymentIntent, createPaymentIntent);
+router.post('/submit',   validateSubmitTransaction,   submitTransaction);
+router.post('/verify',   validateVerifyPayment,       verifyPayment);
+router.post('/sync',     syncAllPayments);
 router.post('/finalize', finalizePayments);
 
 // Parameterized routes
-router.get('/balance/:studentId', validateStudentIdParam, getStudentBalance);
+router.get('/balance/:studentId',      validateStudentIdParam, getStudentBalance);
 router.get('/instructions/:studentId', validateStudentIdParam, getPaymentInstructions);
-router.get('/:studentId', validateStudentIdParam, getStudentPayments);
+router.get('/:studentId',              validateStudentIdParam, getStudentPayments);
 
 module.exports = router;
+

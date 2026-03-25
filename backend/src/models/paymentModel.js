@@ -52,6 +52,10 @@ const paymentSchema = new mongoose.Schema(
     // When the payment was confirmed on the Stellar network (ledger close time)
     confirmedAt:          { type: Date, default: null, index: true },
     verifiedAt:           { type: Date, default: null },
+
+    // ── Payment locking (#91) ─────────────────────────────────────────────
+    lockedUntil:          { type: Date, default: null },
+    lockHolder:           { type: String, default: null },
   },
   {
     timestamps: true, // auto-manages createdAt + updatedAt

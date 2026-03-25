@@ -95,6 +95,43 @@ async function detectMemoCollision(studentObjId, senderAddress, paymentAmount, e
   return { suspicious: false, reason: null };
 }
 
+/**
+ * Detect abnormal payment patterns:
+ *  1. Velocity — same sender exceeds RAPID_TX_LIMIT payments within RAPID_TX_WINDOW_MS.
+ *  2. Unusual amount — payment ratio vs expected fee exceeds UNUSUAL_AMOUNT_MULTIPLIER.
+ *
+ * Thresholds are env-configurable with safe defaults.
+ */
+async function detectAbnormalPatterns(senderAddress, paymentAmount, expectedFee, txDate) {
+  const RAPID_TX_WINDOW_MS      = parseInt(process.env.RAPID_TX_WINDOW_MS, 10)      || 10 * 60 * 1000;
+  const RAPID_TX_LIMIT          = parseInt(process.env.RAPID_TX_LIMIT, 10)          || 3;
+  const UNUSUAL_AMOUNT_MULTIPLIER = parseFloat(process.env.UNUSUAL_AMOUNT_MULTIPLIER) || 3;
+
+  const reasons = [];
+
+  if (senderAddress) {
+    const windowStart = new Date(txDate.getTime() - RAPID_TX_WINDOW_MS);
+    const recentCount = await Payment.countDocuments({
+      senderAddress,
+      confirmedAt: { $gte: windowStart },
+    });
+    if (recentCount >= RAPID_TX_LIMIT) {
+      reasons.push(`Sender ${senderAddress} made ${recentCount + 1} transactions within ${RAPID_TX_WINDOW_MS / 60000} minutes`);
+    }
+  }
+
+  if (expectedFee > 0) {
+    const ratio = paymentAmount / expectedFee;
+    if (ratio > UNUSUAL_AMOUNT_MULTIPLIER || ratio < 1 / UNUSUAL_AMOUNT_MULTIPLIER) {
+      reasons.push(`Unusual amount ${paymentAmount} vs expected fee ${expectedFee} (ratio ${ratio.toFixed(2)})`);
+    }
+  }
+
+  return reasons.length > 0
+    ? { suspicious: true, reason: reasons.join('; ') }
+    : { suspicious: false, reason: null };
+}
+
 async function syncPayments() {
   const transactions = await server
     .transactions()
@@ -126,7 +163,12 @@ async function syncPayments() {
     const isConfirmed = txLedger ? await checkConfirmationStatus(txLedger) : false;
     const confirmationStatus = isConfirmed ? 'confirmed' : 'pending_confirmation';
 
-    const collision = await detectMemoCollision(student._id, senderAddress, paymentAmount, student.feeAmount, txDate);
+    const [collision, abnormal] = await Promise.all([
+      detectMemoCollision(student._id, senderAddress, paymentAmount, student.feeAmount, txDate),
+      detectAbnormalPatterns(senderAddress, paymentAmount, student.feeAmount, txDate),
+    ]);
+    const isSuspicious = collision.suspicious || abnormal.suspicious;
+    const suspicionReason = [collision.reason, abnormal.reason].filter(Boolean).join('; ') || null;
 
     const previousPayments = await Payment.aggregate([
       { $match: { studentId: student._id, status: 'SUCCESS' } },
@@ -161,15 +203,15 @@ async function syncPayments() {
       status: 'SUCCESS',
       memo,
       senderAddress,
-      isSuspicious: collision.suspicious,
-      suspicionReason: collision.reason,
+      isSuspicious: isSuspicious,
+      suspicionReason: suspicionReason,
       ledgerSequence: txLedger,
       confirmationStatus,
       confirmedAt: txDate,
       referenceCode: await generateReferenceCode(),
     });
 
-    if (isConfirmed && !collision.suspicious) {
+    if (isConfirmed && !isSuspicious) {
       await Student.findOneAndUpdate(
         { studentId: intent.studentId },
         {
@@ -540,6 +582,7 @@ module.exports = {
   normalizeAmount,
   extractValidPayment,
   detectMemoCollision,
+  detectAbnormalPatterns,
   finalizeConfirmedPayments,
   checkConfirmationStatus,
   recordPayment,

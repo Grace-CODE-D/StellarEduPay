@@ -11,6 +11,7 @@ const SourceValidationRule = require('../models/sourceValidationRuleModel');
 const { validatePaymentAmount } = require('../utils/paymentLimits');
 const SystemConfig = require('../models/systemConfigModel');
 const { generateReferenceCode } = require('../utils/generateReferenceCode');
+const { withStellarRetry } = require('../utils/withStellarRetry');
 const { decryptMemo } = require('../utils/memoEncryption');
 const logger = require('../utils/logger').child('StellarService');
 const StellarSdk = require('@stellar/stellar-sdk');
@@ -40,6 +41,12 @@ async function extractValidPayment(tx, walletAddress) {
   const rawMemo = tx.memo ? tx.memo.trim() : null;
   if (!rawMemo) return null;
 
+  const ops = await withStellarRetry(
+    () => tx.operations(),
+    { label: 'extractValidPayment.operations' }
+  );
+  const payOp = ops.records.find(op => op.type === 'payment' && op.to === walletAddress);
+  if (!payOp) return null;
   const memo = decryptMemo(rawMemo);
 async function getAdjustedFee(student, intentAmount, paymentDate, schoolId) {
   const feeStructure = await FeeStructure.findOne({
@@ -71,6 +78,13 @@ async function getAdjustedFee(student, intentAmount, paymentDate, schoolId) {
   };
 }
 
+async function checkConfirmationStatus(txLedger) {
+  const latestLedger = await withStellarRetry(
+    () => server.ledgers().order('desc').limit(1).call(),
+    { label: 'checkConfirmationStatus' }
+  );
+  const latestSequence = latestLedger.records[0].sequence;
+  return (latestSequence - txLedger) >= CONFIRMATION_THRESHOLD;
 /**
  * Parse an incoming Stellar transaction for memo and payment amounts.
  * If walletAddress is provided, only payments to that wallet are included.
@@ -200,7 +214,10 @@ async function checkConfirmationStatus(txLedger) {
 /* ====================== MAIN FUNCTIONS ====================== */
 
 async function verifyTransaction(txHash, walletAddress) {
-  const tx = await server.transactions().transaction(txHash).call();
+  const tx = await withStellarRetry(
+    () => server.transactions().transaction(txHash).call(),
+    { label: 'verifyTransaction' }
+  );
 
   if (!tx.successful) {
     throw Object.assign(new Error('Transaction failed'), { code: 'TX_FAILED' });
@@ -216,6 +233,10 @@ async function verifyTransaction(txHash, walletAddress) {
     throw Object.assign(new Error('Missing memo'), { code: 'MISSING_MEMO' });
   }
 
+  const ops = await withStellarRetry(
+    () => tx.operations(),
+    { label: 'verifyTransaction.operations' }
+  );
   const memo = decryptMemo(rawMemo);
 
   const ops = await tx.operations();
@@ -278,6 +299,15 @@ async function verifyTransaction(txHash, walletAddress) {
 async function syncPaymentsForSchool(school) {
   const { schoolId, stellarAddress } = school;
 
+  const transactions = await withStellarRetry(
+    () => server
+      .transactions()
+      .forAccount(stellarAddress)
+      .order('desc')
+      .limit(20)
+      .call(),
+    { label: `syncPaymentsForSchool(${schoolId})` }
+  );
   const transactions = await server.transactions()
     .forAccount(stellarAddress)
     .order('desc')

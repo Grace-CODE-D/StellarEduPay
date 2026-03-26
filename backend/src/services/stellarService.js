@@ -9,9 +9,11 @@ const { feeEngine } = require('./feeAdjustmentEngine');        // ← Dynamic Fe
 const SourceValidationRule = require('../models/sourceValidationRuleModel');
 
 const { validatePaymentAmount } = require('../utils/paymentLimits');
+const SystemConfig = require('../models/systemConfigModel');
 const { generateReferenceCode } = require('../utils/generateReferenceCode');
 const { decryptMemo } = require('../utils/memoEncryption');
 const logger = require('../utils/logger').child('StellarService');
+const StellarSdk = require('@stellar/stellar-sdk');
 
 function detectAsset(payOp) {
   const assetType = payOp.asset_type;
@@ -430,6 +432,53 @@ async function finalizeConfirmedPayments(schoolId) {
   }
 }
 
+/**
+ * Persist a payment record, enforcing uniqueness on txHash.
+ * Throws DUPLICATE_TX if already recorded.
+ * data must include schoolId.
+ */
+async function recordPayment(data) {
+  const exists = await Payment.findOne({ transactionHash: data.transactionHash });
+  if (exists) {
+    const err = new Error(`Transaction ${data.transactionHash} has already been processed`);
+    err.code = 'DUPLICATE_TX';
+    throw err;
+  }
+  if (!data.referenceCode) {
+    data = { ...data, referenceCode: await generateReferenceCode() };
+  }
+  try {
+    return await Payment.create(data);
+  } catch (e) {
+    if (e.code === 11000) {
+      const err = new Error(`Transaction ${data.transactionHash} has already been processed`);
+      err.code = 'DUPLICATE_TX';
+      throw err;
+    }
+    throw err;
+  }
+}
+
+async function getNextSequenceNumber(publicKey) {
+  let config = await SystemConfig.findOne({ key: `seq_${publicKey}` });
+  let nextSequence;
+
+  if (config && config.value) {
+    nextSequence = (BigInt(config.value) + 1n).toString();
+  } else {
+    const account = await server.loadAccount(publicKey);
+    nextSequence = (BigInt(account.sequenceNumber()) + 1n).toString();
+  }
+  
+  await SystemConfig.findOneAndUpdate(
+    { key: `seq_${publicKey}` },
+    { value: nextSequence },
+    { upsert: true }
+  );
+  
+  return nextSequence;
+}
+
 module.exports = {
   syncPaymentsForSchool,
   verifyTransaction,
@@ -439,6 +488,8 @@ module.exports = {
   detectAsset,
   normalizeAmount,
   checkConfirmationStatus,
+  recordPayment,
+  getNextSequenceNumber
   finalizeConfirmedPayments,
   validatePaymentAgainstFee,
   getAdjustedFee,                 // exported for potential external use

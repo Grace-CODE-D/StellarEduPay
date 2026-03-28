@@ -1,13 +1,10 @@
-# Transaction Fee Tracking
+# Write Stellar Integration Documentation
+
+Closes #234
 
 ## Summary
 
-Track network fees associated with each payment. Extract fees from Stellar transactions, store them in the database, and make them visible in the payment records.
-
-## Tasks
-
-- [x] Extract fee from transaction
-- [x] Store in database
+`docs/stellar-integration.md` had only a brief overview. This PR rewrites it as a full contributor reference covering every aspect of the Stellar integration layer.
 
 ## Changes
 
@@ -15,26 +12,23 @@ Track network fees associated with each payment. Extract fees from Stellar trans
 
 | File | Description |
 | ---- | ----------- |
-| [`backend/src/models/paymentModel.js`](backend/src/models/paymentModel.js) | Added `networkFee` field |
-| [`backend/src/services/stellarService.js`](backend/src/services/stellarService.js) | Added fee extraction from Stellar transactions |
-| [`backend/src/controllers/paymentController.js`](backend/src/controllers/paymentController.js) | Stores and returns network fees in API |
+| [`docs/stellar-integration.md`](docs/stellar-integration.md) | Full rewrite with all required sections |
 
-### New Files
+## What's Documented
 
-| File | Description |
-| ---- | ----------- |
-| [`test_fee_tracking.js`](test_fee_tracking.js) | Integration test |
-| [`verify_fee_tracking.js`](verify_fee_tracking.js) | Verification script |
+- Testnet vs mainnet configuration — how `STELLAR_NETWORK` drives `HORIZON_URL`, `USDC_ISSUER`, and `networkPassphrase`
+- Testnet setup instructions — generating a wallet, funding with Friendbot, sending a test payment
+- Memo field — how student IDs are embedded, matched, and optionally encrypted
+- Accepted assets — `ACCEPTED_ASSET` env var, `ALL_ASSETS` config, how to add a new asset
+- `syncPaymentsForSchool` — 10-step walkthrough with code snippets from `stellarService.js`
+- `verifyTransaction` — step-by-step flow with all error codes
+- Fee validation — `valid` / `overpaid` / `underpaid` / `unknown` outcomes
+- Confirmation threshold — ledger-based safety margin and `finalizeConfirmedPayments`
+- Fraud detection — memo collision and abnormal pattern checks
+- Retry behaviour — `withStellarRetry` backoff formula and env overrides
 
 ## Acceptance Criteria
 
-- [x] Fees are recorded and visible
-
-## Implementation
-
-Network fees are extracted from Stellar transactions using:
-```javascript
-const networkFee = parseFloat(tx.fee_paid || '0') / 10000000;
-```
-
-The fees are stored in the payment record and returned in API responses.
+- [x] Contributors understand how to work with the Stellar integration layer
+- [x] Memo-based identification is clearly explained
+- [x] Testnet setup instructions are included

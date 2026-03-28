@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import Navbar from "../components/Navbar";
 import SyncButton from "../components/SyncButton";
-import { getSyncStatus, getStudents } from "../services/api";
+import { getSyncStatus, getStudents, getPaymentSummary } from "../services/api";
 
 const PAGE_SIZE = 50;
 
@@ -47,6 +47,9 @@ export default function Dashboard() {
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(1);
 
+  const [summary, setSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+
   // Search & filter state
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -59,6 +62,14 @@ export default function Dashboard() {
       })
       .catch(() => setError("Failed to load sync status. Please try again."))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    setSummaryLoading(true);
+    getPaymentSummary()
+      .then(({ data }) => setSummary(data))
+      .catch(() => {})
+      .finally(() => setSummaryLoading(false));
   }, []);
 
   useEffect(() => {
@@ -96,6 +107,10 @@ export default function Dashboard() {
     setLastSyncAt(new Date().toISOString());
     setSyncMessage(data?.message || "Sync complete.");
     setTimeout(() => setSyncMessage(null), 3000);
+    // Refresh summary stats after sync
+    getPaymentSummary()
+      .then(({ data: s }) => setSummary(s))
+      .catch(() => {});
   }
 
   function handleRetry() {
@@ -128,6 +143,14 @@ export default function Dashboard() {
         .status-select { padding: 0.45rem 0.75rem; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; background: white; cursor: pointer; }
         .status-select:focus { outline: none; border-color: #1a73e8; }
         .result-count { font-size: 0.82rem; color: #888; margin-left: auto; white-space: nowrap; }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.75rem; }
+        .summary-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 1rem 1.25rem; }
+        .summary-card .label { font-size: 0.78rem; color: #888; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.35rem; }
+        .summary-card .value { font-size: 1.6rem; font-weight: 700; color: #1a1a1a; line-height: 1; }
+        .summary-card.paid .value { color: #2e7d32; }
+        .summary-card.unpaid .value { color: #e65100; }
+        .summary-card.xlm .value { color: #1565c0; }
+        .summary-skeleton { height: 1.6rem; width: 60%; background: #e0e0e0; border-radius: 4px; animation: pulse 1.5s infinite; }
       `}</style>
 
       <div
@@ -216,6 +239,31 @@ export default function Dashboard() {
             Last synced: <strong>{timeAgo(lastSyncAt)}</strong>
           </p>
         )}
+
+        {/* Summary cards */}
+        <div className="summary-cards" aria-label="Payment summary statistics">
+          {[
+            { label: "Total Students", value: summary?.totalStudents, cls: "" },
+            { label: "Paid", value: summary?.paidCount, cls: "paid" },
+            { label: "Unpaid", value: summary?.unpaidCount, cls: "unpaid" },
+            {
+              label: "XLM Collected",
+              value: summary
+                ? `${summary.totalXlmCollected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })} XLM`
+                : null,
+              cls: "xlm",
+            },
+          ].map(({ label, value, cls }) => (
+            <div key={label} className={`summary-card ${cls}`}>
+              <div className="label">{label}</div>
+              {summaryLoading || value == null ? (
+                <div className="summary-skeleton" aria-hidden="true" />
+              ) : (
+                <div className="value">{value}</div>
+              )}
+            </div>
+          ))}
+        </div>
 
         {/* Student table section */}
         <h2

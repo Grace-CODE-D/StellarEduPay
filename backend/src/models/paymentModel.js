@@ -69,6 +69,10 @@ paymentSchema.virtual('explorerUrl').get(function () {
   return `https://stellar.expert/explorer/${network}/tx/${hash}`;
 });
 
+paymentSchema.virtual('stellarExplorerUrl').get(function () {
+  return this.explorerUrl;
+});
+
 paymentSchema.pre('save', async function (next) {
   if (!this.isNew && this.isModified()) {
     try {

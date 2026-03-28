@@ -220,16 +220,14 @@ async function submitTransaction(req, res, next) {
     // (Amount should be extracted from operations, but verifyTransaction does that better)
     await paymentRecord.save();
 
-    const submitNetwork = process.env.STELLAR_NETWORK === 'mainnet' ? 'public' : 'testnet';
+    const stellarExplorerUrl = getExplorerUrl(normalizedHash);
     res.json({
       verified: true,
-      hash: transactionHash,
-      explorerUrl: getExplorerUrl(transactionHash),
       hash: normalizedHash,
       ledger: txResponse.ledger,
-      status: "SUCCESS",
       status: 'SUCCESS',
-      explorerUrl: `https://stellar.expert/explorer/${submitNetwork}/tx/${transactionHash}`,
+      stellarExplorerUrl,
+      explorerUrl: stellarExplorerUrl,
     });
   } catch (err) {
     next(err);
@@ -293,6 +291,7 @@ async function verifyPayment(req, res, next) {
         message: 'Stellar network is temporarily unavailable. Your transaction has been queued and will be verified automatically.',
         txHash: normalizedHash,
         status: 'queued_for_retry',
+        stellarExplorerUrl: getExplorerUrl(normalizedHash),
       });
     }
 
@@ -352,10 +351,12 @@ async function verifyPayment(req, res, next) {
     const targetCurrency = req.school.localCurrency || 'USD';
     const conversion = await convertToLocalCurrency(result.amount, result.assetCode || 'XLM', targetCurrency);
 
+    const stellarExplorerUrl = getExplorerUrl(result.hash);
     res.json({
       verified: true,
       hash: result.hash,
-      explorerUrl: getExplorerUrl(result.hash),
+      stellarExplorerUrl,
+      explorerUrl: stellarExplorerUrl,
       memo: result.memo,
       studentId: result.studentId || result.memo,
       amount: result.amount,
@@ -432,8 +433,6 @@ async function finalizePayments(req, res, next) {
 async function getStudentPayments(req, res, next) {
   try {
     const targetCurrency = req.school.localCurrency || 'USD';
-    const network = process.env.STELLAR_NETWORK === 'mainnet' ? 'public' : 'testnet';
-
     const payments = await Payment
       .find({ schoolId: req.schoolId, studentId: req.params.studentId })
       .sort({ confirmedAt: -1 })
@@ -442,9 +441,13 @@ async function getStudentPayments(req, res, next) {
     const enriched = await Promise.all(
       payments.map(async (p) => {
         const hash = p.transactionHash || p.txHash;
-        const explorerUrl = hash ? `https://stellar.expert/explorer/${network}/tx/${hash}` : null;
+        const stellarExplorerUrl = getExplorerUrl(hash);
         const converted = await enrichPaymentWithConversion(p, targetCurrency);
-        return { ...converted, explorerUrl };
+        return {
+          ...converted,
+          stellarExplorerUrl,
+          explorerUrl: stellarExplorerUrl,
+        };
       })
     );
     res.json(enriched);
@@ -724,6 +727,7 @@ async function getAllPayments(req, res, next) {
 
     const enrichedPayments = payments.map((p) => ({
       ...p,
+      stellarExplorerUrl: getExplorerUrl(p.transactionHash || p.txHash),
       explorerUrl: getExplorerUrl(p.transactionHash || p.txHash),
     }));
 

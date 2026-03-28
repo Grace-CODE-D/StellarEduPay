@@ -1,5 +1,5 @@
 /**
- * TransactionCard — displays a single payment record.
+ * TransactionCard - displays a single payment record.
  *
  * Shows both the XLM/USDC amount and the local currency equivalent when available.
  * If the price feed was unavailable at verification time, only the asset amount is shown.
@@ -12,52 +12,53 @@ export default function TransactionCard({ payment, schoolId, schoolSlug }) {
   const {
     txHash,
     amount,
-    assetCode = "XLM",
+    assetCode = 'XLM',
     confirmedAt,
     studentId,
     localCurrency,
+    stellarExplorerUrl,
     explorerUrl,
-    dispute,        // optional: pre-fetched dispute record for this payment
+    dispute,
   } = payment;
 
-  const [disputeState, setDisputeState]   = useState(dispute || null);
-  const [showForm, setShowForm]           = useState(false);
-  const [raisedBy, setRaisedBy]           = useState('');
-  const [reason, setReason]               = useState('');
-  const [submitting, setSubmitting]       = useState(false);
-  const [error, setError]                 = useState(null);
+  const [disputeState, setDisputeState] = useState(dispute || null);
+  const [showForm, setShowForm] = useState(false);
+  const [raisedBy, setRaisedBy] = useState('');
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   const formattedAmount = `${parseFloat(amount).toFixed(7)} ${assetCode}`;
-  const formattedDate = confirmedAt
-    ? new Date(confirmedAt).toLocaleString()
-    : "—";
-
+  const formattedDate = confirmedAt ? new Date(confirmedAt).toLocaleString() : '-';
   const hasLocal = localCurrency?.available && localCurrency?.amount != null;
   const rateTime = localCurrency?.rateTimestamp
     ? new Date(localCurrency.rateTimestamp).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
+        hour: '2-digit',
+        minute: '2-digit',
       })
     : null;
+  const transactionExplorerUrl = stellarExplorerUrl || explorerUrl;
 
   const disputeStatusColor = {
-    open:         '#e65100',
+    open: '#e65100',
     under_review: '#1565c0',
-    resolved:     '#2e7d32',
-    rejected:     '#757575',
+    resolved: '#2e7d32',
+    rejected: '#757575',
   };
 
   async function handleFlagDispute(e) {
     e.preventDefault();
     if (!raisedBy.trim() || !reason.trim()) return;
+
     setSubmitting(true);
     setError(null);
+
     try {
       const headers = {};
-      if (schoolId)   headers['X-School-ID']   = schoolId;
+      if (schoolId) headers['X-School-ID'] = schoolId;
       if (schoolSlug) headers['X-School-Slug'] = schoolSlug;
 
-      const { data } = await flagDispute({ txHash, studentId, raisedBy, reason });
+      const { data } = await flagDispute({ txHash, studentId, raisedBy, reason }, { headers });
       setDisputeState(data);
       setShowForm(false);
       setRaisedBy('');
@@ -72,83 +73,59 @@ export default function TransactionCard({ payment, schoolId, schoolSlug }) {
   return (
     <div
       style={{
-        border: "1px solid #ddd",
         border: disputeState ? '1px solid #e65100' : '1px solid #ddd',
         borderRadius: 8,
-        padding: "0.75rem 1rem",
-        marginBottom: "0.5rem",
-        fontFamily: "sans-serif",
+        padding: '0.75rem 1rem',
+        marginBottom: '0.5rem',
+        fontFamily: 'sans-serif',
       }}
     >
-      {/* Amount row */}
       <p style={{ margin: 0 }}>
         <strong>Amount:</strong> {formattedAmount}
         {hasLocal && (
           <span
             style={{
-              marginLeft: "0.5rem",
-              color: "#2e7d32",
-              fontSize: "0.9rem",
+              marginLeft: '0.5rem',
+              color: '#2e7d32',
+              fontSize: '0.9rem',
             }}
           >
-            ≈ {localCurrency.amount.toFixed(2)} {localCurrency.currency}
+            ~ {localCurrency.amount.toFixed(2)} {localCurrency.currency}
           </span>
         )}
         {!hasLocal && localCurrency && (
-          <span
-            style={{ marginLeft: "0.5rem", color: "#999", fontSize: "0.8rem" }}
-          >
+          <span style={{ marginLeft: '0.5rem', color: '#999', fontSize: '0.8rem' }}>
             (rate unavailable)
           </span>
         )}
       </p>
 
-      {/* Rate freshness */}
       {hasLocal && rateTime && (
-        <p style={{ margin: "0.1rem 0 0", fontSize: "0.75rem", color: "#aaa" }}>
+        <p style={{ margin: '0.1rem 0 0', fontSize: '0.75rem', color: '#aaa' }}>
           Rate as of {rateTime}
         </p>
       )}
 
-      {/* Transaction hash */}
-      <p style={{ margin: "0.25rem 0", fontSize: "0.85rem", color: "#555" }}>
-        <strong>Tx:</strong>{" "}
-        {explorerUrl ? (
-      {/* Transaction hash + explorer link */}
       <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#555' }}>
         <strong>Tx:</strong>{' '}
         <code style={{ wordBreak: 'break-all', fontSize: '0.8rem' }}>{txHash}</code>
-        {explorerUrl && (
+        {transactionExplorerUrl && (
           <a
-            href={explorerUrl}
+            href={transactionExplorerUrl}
             target="_blank"
             rel="noopener noreferrer"
-            style={{
-              wordBreak: "break-all",
-              fontSize: "0.8rem",
-              color: "#1a73e8",
-            }}
-          >
-            {txHash}
-          </a>
-        ) : (
-          <code style={{ wordBreak: "break-all", fontSize: "0.8rem" }}>
-            {txHash}
-          </code>
             style={{ marginLeft: '0.5rem', fontSize: '0.8rem', color: '#1565c0' }}
             aria-label="View transaction on Stellar Expert"
           >
-            View on Explorer ↗
+            View on Explorer
           </a>
         )}
       </p>
 
-      {/* Date + student */}
-      <p style={{ margin: 0, fontSize: "0.85rem", color: "#888" }}>
-        {formattedDate} — Student {studentId}
+      <p style={{ margin: 0, fontSize: '0.85rem', color: '#888' }}>
+        {formattedDate} - Student {studentId}
       </p>
 
-      {/* ── Dispute section ─────────────────────────────────────────────── */}
       {disputeState ? (
         <p
           style={{
@@ -158,8 +135,8 @@ export default function TransactionCard({ payment, schoolId, schoolSlug }) {
           }}
           aria-label={`Dispute status: ${disputeState.status}`}
         >
-          ⚑ Dispute {disputeState.status.replace('_', ' ')}
-          {disputeState.resolutionNote && ` — ${disputeState.resolutionNote}`}
+          Dispute {disputeState.status.replace('_', ' ')}
+          {disputeState.resolutionNote && ` - ${disputeState.resolutionNote}`}
         </p>
       ) : (
         <div style={{ marginTop: '0.5rem' }}>
@@ -187,7 +164,13 @@ export default function TransactionCard({ payment, schoolId, schoolSlug }) {
                 value={raisedBy}
                 onChange={(e) => setRaisedBy(e.target.value)}
                 required
-                style={{ display: 'block', width: '100%', marginBottom: '0.25rem', fontSize: '0.8rem', padding: '0.2rem 0.4rem' }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  marginBottom: '0.25rem',
+                  fontSize: '0.8rem',
+                  padding: '0.2rem 0.4rem',
+                }}
                 aria-label="Your name"
               />
               <textarea
@@ -196,7 +179,14 @@ export default function TransactionCard({ payment, schoolId, schoolSlug }) {
                 onChange={(e) => setReason(e.target.value)}
                 required
                 rows={2}
-                style={{ display: 'block', width: '100%', marginBottom: '0.25rem', fontSize: '0.8rem', padding: '0.2rem 0.4rem', resize: 'vertical' }}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  marginBottom: '0.25rem',
+                  fontSize: '0.8rem',
+                  padding: '0.2rem 0.4rem',
+                  resize: 'vertical',
+                }}
                 aria-label="Dispute reason"
               />
               {error && (
@@ -209,12 +199,21 @@ export default function TransactionCard({ payment, schoolId, schoolSlug }) {
                 disabled={submitting}
                 style={{ fontSize: '0.78rem', marginRight: '0.5rem', cursor: 'pointer' }}
               >
-                {submitting ? 'Submitting…' : 'Submit dispute'}
+                {submitting ? 'Submitting...' : 'Submit dispute'}
               </button>
               <button
                 type="button"
-                onClick={() => { setShowForm(false); setError(null); }}
-                style={{ fontSize: '0.78rem', cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline' }}
+                onClick={() => {
+                  setShowForm(false);
+                  setError(null);
+                }}
+                style={{
+                  fontSize: '0.78rem',
+                  cursor: 'pointer',
+                  background: 'none',
+                  border: 'none',
+                  textDecoration: 'underline',
+                }}
               >
                 Cancel
               </button>

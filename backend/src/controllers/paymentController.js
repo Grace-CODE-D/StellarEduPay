@@ -251,8 +251,6 @@ async function submitTransaction(req, res, next) {
       process.env.STELLAR_NETWORK === "mainnet" ? "public" : "testnet";
     res.json({
       verified: true,
-      hash: transactionHash,
-      explorerUrl: getExplorerUrl(transactionHash),
       hash: normalizedHash,
       ledger: txResponse.ledger,
       status: "SUCCESS",
@@ -400,10 +398,12 @@ async function verifyPayment(req, res, next) {
       targetCurrency,
     );
 
+    const stellarExplorerUrl = getExplorerUrl(result.hash);
     res.json({
       verified: true,
       hash: result.hash,
-      explorerUrl: getExplorerUrl(result.hash),
+      stellarExplorerUrl,
+      explorerUrl: stellarExplorerUrl,
       memo: result.memo,
       studentId: result.studentId || result.memo,
       amount: result.amount,
@@ -809,6 +809,7 @@ async function getAllPayments(req, res, next) {
 
     const enrichedPayments = payments.map((p) => ({
       ...p,
+      stellarExplorerUrl: getExplorerUrl(p.transactionHash || p.txHash),
       explorerUrl: getExplorerUrl(p.transactionHash || p.txHash),
     }));
 

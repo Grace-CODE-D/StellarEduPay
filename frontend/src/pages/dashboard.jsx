@@ -23,8 +23,23 @@ export default function Dashboard() {
   const [summary, setSummary] = useState(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
 
-  useEffect(() => {
-    getSyncStatus()
+  const [students, setStudents] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [pages, setPages] = useState(1);
+
+  const [summary, setSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+
+  // Search & filter state
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const fetchStudents = useCallback((p = page) => {
+    setLoading(true);
+    setError(null);
+    return getStudents(p, PAGE_SIZE)
       .then(({ data }) => {
         setLastSyncAt(data.lastSyncAt);
         setError(null);
@@ -34,6 +49,15 @@ export default function Dashboard() {
         console.error(err);
       })
       .finally(() => setLoading(false));
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Initial load: sync status + first page of students
+  useEffect(() => {
+    setSummaryLoading(true);
+    getPaymentSummary()
+      .then(({ data }) => setSummary(data))
+      .catch(() => {})
+      .finally(() => setSummaryLoading(false));
   }, []);
 
   useEffect(() => {
@@ -42,6 +66,25 @@ export default function Dashboard() {
       .catch(() => {})
       .finally(() => setSummaryLoading(false));
   }, []);
+
+  // Client-side filtering
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return students.filter((s) => {
+      const matchesSearch =
+        !q ||
+        (s.name || "").toLowerCase().includes(q) ||
+        (s.studentId || s.student_id || "").toLowerCase().includes(q);
+
+      const paid = s.hasPaid ?? s.has_paid ?? false;
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "paid" && paid) ||
+        (statusFilter === "unpaid" && !paid);
+
+      return matchesSearch && matchesStatus;
+    });
+  }, [students, search, statusFilter]);
 
   function handleSyncComplete(data) {
     setLastSyncAt(new Date().toISOString());
@@ -118,6 +161,7 @@ export default function Dashboard() {
           />
         </div>
 
+        {/* Toast */}
         {syncMessage && (
           <p
             style={{
@@ -133,6 +177,7 @@ export default function Dashboard() {
           </p>
         )}
 
+        {/* Sync status */}
         {loading ? (
           <p style={{ fontSize: "0.85rem", color: "#888" }}>
             Loading sync status…
@@ -197,3 +242,13 @@ export default function Dashboard() {
     </>
   );
 }
+
+const pageBtnStyle = {
+  padding: '0.4rem 0.9rem',
+  fontSize: '0.88rem',
+  background: '#1a1a2e',
+  color: '#fff',
+  border: 'none',
+  borderRadius: 6,
+  cursor: 'pointer',
+};

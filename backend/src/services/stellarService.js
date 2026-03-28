@@ -11,7 +11,6 @@ const PaymentIntent = require("../models/paymentIntentModel");
 const { validatePaymentAmount } = require("../utils/paymentLimits");
 const { generateReferenceCode } = require("../utils/generateReferenceCode");
 const { withStellarRetry } = require("../utils/withStellarRetry");
-const { classifyHorizonError } = require("../utils/withStellarRetry");
 const logger = require("../utils/logger").child("StellarService");
 
 function detectAsset(payOp) {
@@ -232,15 +231,10 @@ async function recordPayment(data) {
  *   AMOUNT_TOO_LOW/HIGH (400) — outside configured limits
  */
 async function verifyTransaction(txHash, walletAddress) {
-  let tx;
-  try {
-    tx = await withStellarRetry(
-      () => server.transactions().transaction(txHash).call(),
-      { label: "verifyTransaction" },
-    );
-  } catch (err) {
-    throw classifyHorizonError(err, `Transaction ${txHash}`);
-  }
+  const tx = await withStellarRetry(
+    () => server.transactions().transaction(txHash).call(),
+    { label: "verifyTransaction" },
+  );
 
   // 1. Validate transaction success
   if (tx.successful === false) {
@@ -260,14 +254,9 @@ async function verifyTransaction(txHash, walletAddress) {
     throw err;
   }
 
-  let ops;
-  try {
-    ops = await withStellarRetry(() => tx.operations(), {
-      label: "verifyTransaction.operations",
-    });
-  } catch (err) {
-    throw classifyHorizonError(err, "Transaction operations");
-  }
+  const ops = await withStellarRetry(() => tx.operations(), {
+    label: "verifyTransaction.operations",
+  });
   const payOp = ops.records.find(
     (op) => op.type === "payment" && op.to === walletAddress,
   );
@@ -342,23 +331,19 @@ async function verifyTransaction(txHash, walletAddress) {
 async function syncPaymentsForSchool(school) {
   const { schoolId, stellarAddress } = school;
 
-  let page;
-  try {
-    page = await withStellarRetry(
-      () =>
-        server
-          .transactions()
-          .forAccount(stellarAddress)
-          .order("desc")
-          .limit(200)
-          .call(),
-      { label: `syncPaymentsForSchool(${schoolId})` },
-    );
-  } catch (err) {
-    throw classifyHorizonError(err, `Account ${stellarAddress}`);
-  }
+  let page = await withStellarRetry(
+    () =>
+      server
+        .transactions()
+        .forAccount(stellarAddress)
+        .order("desc")
+        .limit(200)
+        .call(),
+    { label: `syncPaymentsForSchool(${schoolId})` },
+  );
 
   let done = false;
+  let newPayments = 0;
   while (!done) {
     for (const tx of page.records) {
       const existing = await Payment.findOne({ txHash: tx.hash });
@@ -461,6 +446,7 @@ async function syncPaymentsForSchool(school) {
           confirmationStatus: "failed",
           confirmedAt: txDate,
         });
+        newPayments++;
         continue;
       }
 
@@ -481,6 +467,7 @@ async function syncPaymentsForSchool(school) {
         confirmationStatus,
         confirmedAt: txDate,
       });
+      newPayments++;
 
       logger.info("Transaction recorded", {
         txHash: tx.hash,
@@ -509,16 +496,13 @@ async function syncPaymentsForSchool(school) {
 
     if (!done) {
       if (page.records.length < 200) break; // last page
-      try {
-        page = await withStellarRetry(() => page.next(), {
-          label: `syncPaymentsForSchool.next(${schoolId})`,
-        });
-      } catch (err) {
-        throw classifyHorizonError(err, "Fetching next transaction page");
-      }
+      page = await withStellarRetry(() => page.next(), {
+        label: `syncPaymentsForSchool.next(${schoolId})`,
+      });
       if (!page || !page.records.length) break;
     }
   }
+  return { newPayments };
 }
 
 /**

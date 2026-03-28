@@ -1,29 +1,34 @@
-# Add Dockerfile for Backend Service
+# Write Stellar Integration Documentation
 
-Closes #233
+Closes #234
 
 ## Summary
 
-`docker-compose.yml` references `build: ./backend` but no `Dockerfile` existed, causing `docker compose up` to fail immediately. This PR adds the missing `backend/Dockerfile`.
+`docs/stellar-integration.md` had only a brief overview. This PR rewrites it as a full contributor reference covering every aspect of the Stellar integration layer.
 
 ## Changes
 
-### New Files
+### Modified Files
 
 | File | Description |
 | ---- | ----------- |
-| [`backend/Dockerfile`](backend/Dockerfile) | Multi-layer Docker build for the Express backend |
+| [`docs/stellar-integration.md`](docs/stellar-integration.md) | Full rewrite with all required sections |
+
+## What's Documented
+
+- Testnet vs mainnet configuration — how `STELLAR_NETWORK` drives `HORIZON_URL`, `USDC_ISSUER`, and `networkPassphrase`
+- Testnet setup instructions — generating a wallet, funding with Friendbot, sending a test payment
+- Memo field — how student IDs are embedded, matched, and optionally encrypted
+- Accepted assets — `ACCEPTED_ASSET` env var, `ALL_ASSETS` config, how to add a new asset
+- `syncPaymentsForSchool` — 10-step walkthrough with code snippets from `stellarService.js`
+- `verifyTransaction` — step-by-step flow with all error codes
+- Fee validation — `valid` / `overpaid` / `underpaid` / `unknown` outcomes
+- Confirmation threshold — ledger-based safety margin and `finalizeConfirmedPayments`
+- Fraud detection — memo collision and abnormal pattern checks
+- Retry behaviour — `withStellarRetry` backoff formula and env overrides
 
 ## Implementation Details
 
-- Base image: `node:18-alpine` (small, production-grade)
-- Dependencies installed with `npm ci --omit=dev` (clean, no devDependencies)
-- Runs as a non-root user (`appuser`) for security
-- `HEALTHCHECK` hits `GET /health` every 30s so Docker and compose know when the container is ready
-- `EXPOSE 5000` matches the port in `docker-compose.yml`
-
-## Acceptance Criteria
-
-- [x] `docker compose up` builds and starts the backend container successfully
-- [x] Container runs as a non-root user
-- [x] Health check endpoint reachable at `http://localhost:5000/health`
+- [x] Contributors understand how to work with the Stellar integration layer
+- [x] Memo-based identification is clearly explained
+- [x] Testnet setup instructions are included

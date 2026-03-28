@@ -1,9 +1,7 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect } from "react";
 import Navbar from "../components/Navbar";
 import SyncButton from "../components/SyncButton";
-import { getSyncStatus, getStudents, getPaymentSummary } from "../services/api";
-
-const PAGE_SIZE = 50;
+import { getSyncStatus, getPaymentSummary } from "../services/api";
 
 function timeAgo(isoString) {
   if (!isoString) return "Never";
@@ -16,30 +14,14 @@ function timeAgo(isoString) {
   return new Date(isoString).toLocaleString();
 }
 
-function SkeletonRow() {
-  return (
-    <tr>
-      {[1, 2, 3, 4].map((i) => (
-        <td key={i} style={{ padding: "0.6rem 0.75rem" }}>
-          <div
-            style={{
-              height: "0.85rem",
-              background: "#e0e0e0",
-              borderRadius: 4,
-              animation: "pulse 1.5s infinite",
-            }}
-          />
-        </td>
-      ))}
-    </tr>
-  );
-}
-
 export default function Dashboard() {
   const [lastSyncAt, setLastSyncAt] = useState(null);
   const [syncMessage, setSyncMessage] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const [summary, setSummary] = useState(null);
+  const [summaryLoading, setSummaryLoading] = useState(true);
 
   const [students, setStudents] = useState([]);
   const [studentsLoading, setStudentsLoading] = useState(true);
@@ -62,7 +44,10 @@ export default function Dashboard() {
         setLastSyncAt(data.lastSyncAt);
         setError(null);
       })
-      .catch(() => setError("Failed to load sync status. Please try again."))
+      .catch((err) => {
+        setError("Failed to load sync status. Please try again.");
+        console.error(err);
+      })
       .finally(() => setLoading(false));
   }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -76,16 +61,11 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    setStudentsLoading(true);
-    getStudents(page, PAGE_SIZE)
-      .then(({ data }) => {
-        setStudents(data.students || []);
-        setTotal(data.total || 0);
-        setPages(data.pages || 1);
-      })
+    getPaymentSummary()
+      .then(({ data }) => setSummary(data))
       .catch(() => {})
-      .finally(() => setStudentsLoading(false));
-  }, [page]);
+      .finally(() => setSummaryLoading(false));
+  }, []);
 
   // Client-side filtering
   const filtered = useMemo(() => {
@@ -110,7 +90,6 @@ export default function Dashboard() {
     setLastSyncAt(new Date().toISOString());
     setSyncMessage(data?.message || "Sync complete.");
     setTimeout(() => setSyncMessage(null), 3000);
-    // Refresh summary stats after sync
     getPaymentSummary()
       .then(({ data: s }) => setSummary(s))
       .catch(() => {});
@@ -124,28 +103,31 @@ export default function Dashboard() {
         setLastSyncAt(data.lastSyncAt);
         setError(null);
       })
-      .catch(() => setError("Failed to load sync status. Please try again."))
+      .catch((err) => {
+        setError("Failed to load sync status. Please try again.");
+        console.error(err);
+      })
       .finally(() => setLoading(false));
   }
+
+  const cards = [
+    { label: "Total Students", value: summary?.totalStudents, cls: "" },
+    { label: "Paid", value: summary?.paidCount, cls: "paid" },
+    { label: "Unpaid", value: summary?.unpaidCount, cls: "unpaid" },
+    {
+      label: "XLM Collected",
+      value: summary
+        ? `${summary.totalXlmCollected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })} XLM`
+        : null,
+      cls: "xlm",
+    },
+  ];
 
   return (
     <>
       <Navbar />
       <style>{`
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .student-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-        .student-table th, .student-table td { padding: 0.6rem 0.75rem; text-align: left; border-bottom: 1px solid #eee; }
-        .student-table th { background: #f5f5f5; font-weight: 600; color: #444; }
-        .student-table tr:hover td { background: #fafafa; }
-        .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 12px; font-size: 0.78rem; font-weight: 500; }
-        .badge-paid { background: #e8f5e9; color: #2e7d32; }
-        .badge-unpaid { background: #fff3e0; color: #e65100; }
-        .filter-bar { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center; }
-        .search-input { flex: 1; min-width: 200px; padding: 0.45rem 0.75rem; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; }
-        .search-input:focus { outline: none; border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,0.15); }
-        .status-select { padding: 0.45rem 0.75rem; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem; background: white; cursor: pointer; }
-        .status-select:focus { outline: none; border-color: #1a73e8; }
-        .result-count { font-size: 0.82rem; color: #888; margin-left: auto; white-space: nowrap; }
         .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-bottom: 1.75rem; }
         .summary-card { background: #fff; border: 1px solid #e0e0e0; border-radius: 10px; padding: 1rem 1.25rem; }
         .summary-card .label { font-size: 0.78rem; color: #888; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.35rem; }
@@ -164,7 +146,6 @@ export default function Dashboard() {
           padding: "0 1rem",
         }}
       >
-        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -246,18 +227,7 @@ export default function Dashboard() {
 
         {/* Summary cards */}
         <div className="summary-cards" aria-label="Payment summary statistics">
-          {[
-            { label: "Total Students", value: summary?.totalStudents, cls: "" },
-            { label: "Paid", value: summary?.paidCount, cls: "paid" },
-            { label: "Unpaid", value: summary?.unpaidCount, cls: "unpaid" },
-            {
-              label: "XLM Collected",
-              value: summary
-                ? `${summary.totalXlmCollected.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 7 })} XLM`
-                : null,
-              cls: "xlm",
-            },
-          ].map(({ label, value, cls }) => (
+          {cards.map(({ label, value, cls }) => (
             <div key={label} className={`summary-card ${cls}`}>
               <div className="label">{label}</div>
               {summaryLoading || value == null ? (
@@ -268,146 +238,6 @@ export default function Dashboard() {
             </div>
           ))}
         </div>
-
-        {/* Student table section */}
-        <h2
-          style={{ fontSize: "1.1rem", marginBottom: "0.75rem", color: "#333" }}
-        >
-          Students
-        </h2>
-
-        {/* Filter bar */}
-        <div className="filter-bar">
-          <input
-            className="search-input"
-            type="search"
-            placeholder="Search by name or student ID…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search students by name or ID"
-          />
-          <select
-            className="status-select"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            aria-label="Filter by payment status"
-          >
-            <option value="all">All statuses</option>
-            <option value="paid">Paid</option>
-            <option value="unpaid">Unpaid</option>
-          </select>
-          {!studentsLoading && (
-            <span className="result-count">
-              {filtered.length} of {students.length} student
-              {students.length !== 1 ? "s" : ""}
-            </span>
-          )}
-        </div>
-
-        {/* Table */}
-        <div
-          style={{
-            overflowX: "auto",
-            borderRadius: 8,
-            border: "1px solid #e0e0e0",
-          }}
-        >
-          <table className="student-table" aria-label="Student list">
-            <thead>
-              <tr>
-                <th>Student ID</th>
-                <th>Name</th>
-                <th>Class</th>
-                <th>Payment Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {studentsLoading ? (
-                Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={4}
-                    style={{
-                      textAlign: "center",
-                      color: "#999",
-                      padding: "2rem",
-                    }}
-                  >
-                    {students.length === 0
-                      ? "No students found."
-                      : "No students match your filters."}
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((s) => {
-                  const paid = s.hasPaid ?? s.has_paid ?? false;
-                  return (
-                    <tr key={s.studentId || s.student_id || s.id}>
-                      <td>
-                        <code style={{ fontSize: "0.82rem" }}>
-                          {s.studentId || s.student_id}
-                        </code>
-                      </td>
-                      <td>{s.name || "—"}</td>
-                      <td>{s.class || s.className || "—"}</td>
-                      <td>
-                        <span
-                          className={`badge ${paid ? "badge-paid" : "badge-unpaid"}`}
-                        >
-                          {paid ? "Paid" : "Unpaid"}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination */}
-        {!studentsLoading && pages > 1 && (
-          <div
-            style={{
-              display: "flex",
-              gap: "0.5rem",
-              justifyContent: "center",
-              marginTop: "1rem",
-              alignItems: "center",
-            }}
-          >
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              style={{
-                padding: "0.4rem 0.9rem",
-                borderRadius: 4,
-                border: "1px solid #ccc",
-                cursor: page === 1 ? "default" : "pointer",
-                background: page === 1 ? "#f5f5f5" : "white",
-              }}
-            >
-              ← Prev
-            </button>
-            <span style={{ fontSize: "0.85rem", color: "#666" }}>
-              Page {page} of {pages}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(pages, p + 1))}
-              disabled={page === pages}
-              style={{
-                padding: "0.4rem 0.9rem",
-                borderRadius: 4,
-                border: "1px solid #ccc",
-                cursor: page === pages ? "default" : "pointer",
-                background: page === pages ? "#f5f5f5" : "white",
-              }}
-            >
-              Next →
-            </button>
-          </div>
-        )}
       </div>
     </>
   );

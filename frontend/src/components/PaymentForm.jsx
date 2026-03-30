@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import { getStudent, getPaymentInstructions, getStudentPayments } from '../services/api';
+import { generateStellarPaymentUri } from '../utils/stellarUri';
 import TransactionCard from './TransactionCard';
 
 export default function PaymentForm() {
@@ -174,6 +176,34 @@ export default function PaymentForm() {
               </ul>
             </div>
           )}
+
+          <div className="mt-1-5 mb-1">
+            <h4 className="mb-0-5">Scan to Pay with Stellar Wallet</h4>
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center',
+              padding: '1rem',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '8px',
+              border: '1px solid #dee2e6'
+            }}>
+              <QRCodeSVG
+                value={generateStellarPaymentUri({
+                  destination: instructions.walletAddress,
+                  amount: instructions.feeAmount || student.feeAmount,
+                  memo: instructions.memo,
+                  memoType: instructions.memoType || 'text',
+                })}
+                size={200}
+                level="M"
+                includeMargin={true}
+              />
+              <p className="text-muted mt-0-5" style={{ textAlign: 'center', fontSize: '0.9rem' }}>
+                Scan this QR code with a Stellar-compatible wallet app to automatically fill in the payment details (wallet address, amount, and memo).
+              </p>
+            </div>
+          </div>
 
           <p className="text-muted mt-1">
             {instructions.note}

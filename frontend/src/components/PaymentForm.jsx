@@ -20,11 +20,14 @@ export default function PaymentForm() {
       const [stuRes, instrRes, paymentsRes] = await Promise.all([
         getStudent(studentId),
         getPaymentInstructions(studentId),
-        getStudentPayments(studentId),
+        getStudentPayments(studentId, pageNum),
       ]);
       setStudent(stuRes.data);
       setInstructions(instrRes.data);
-      setPayments(paymentsRes.data ?? []);
+      setPayments(paymentsRes.data?.payments ?? []);
+      setTotalPages(paymentsRes.data?.pages ?? 1);
+      setTotalPayments(paymentsRes.data?.total ?? 0);
+      setPage(pageNum);
     } catch {
       setError("Student not found. Please check the ID.");
       errorRef.current?.focus();

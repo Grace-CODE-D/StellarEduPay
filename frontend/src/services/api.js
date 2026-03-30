@@ -9,6 +9,7 @@ const api = axios.create({
 
 export const getStudents = (page = 1, limit = 50) =>
   api.get("/students", { params: { page, limit } });
+export const registerStudent = (data) => api.post("/students", data);
 export const getPaymentSummary = () => api.get("/payments/summary");
 export const getPaymentInstructions = (studentId) => api.get(`/payments/instructions/${studentId}`);
 export const getStudentPayments = (studentId) => api.get(`/payments/${studentId}`);

@@ -19,7 +19,12 @@ export async function fetchXlmPrice() {
 
   try {
     const response = await fetch(
-      'https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd'
+      'https://api.coingecko.com/api/v3/simple/price?ids=stellar&vs_currencies=usd',
+      {
+        headers: {
+          'Accept': 'application/json',
+        }
+      }
     );
     
     if (!response.ok) {
@@ -50,13 +55,14 @@ export async function fetchXlmPrice() {
  * @returns {Promise<{usd: number|null, rate: number|null, cached: boolean}>}
  */
 export async function convertXlmToUsd(xlmAmount) {
+  const wasCached = priceCache !== null && lastFetchTime && Date.now() - lastFetchTime < CACHE_DURATION;
   const rate = await fetchXlmPrice();
   
   if (rate === null) {
     return { usd: null, rate: null, cached: false };
   }
 
-  const isCached = lastFetchTime && Date.now() - lastFetchTime < CACHE_DURATION;
+  const isCached = wasCached || (lastFetchTime && Date.now() - lastFetchTime < CACHE_DURATION);
   
   return {
     usd: parseFloat((xlmAmount * rate).toFixed(2)),
@@ -80,4 +86,12 @@ export function getCacheStatus() {
     age,
     valid: age < CACHE_DURATION
   };
+}
+
+/**
+ * Clear the cache (useful for testing)
+ */
+export function clearCache() {
+  priceCache = null;
+  lastFetchTime = null;
 }

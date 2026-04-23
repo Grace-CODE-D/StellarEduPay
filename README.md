@@ -489,15 +489,31 @@ Visit **http://localhost:3000** in your browser.
 
 ```bash
 # From the project root — replace the value with your actual public key
+# MongoDB credentials are set via environment variables (defaults: root/password)
 SCHOOL_WALLET_ADDRESS=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX docker compose up --build
+```
+
+To use custom MongoDB credentials, set them before running:
+
+```bash
+export MONGO_ROOT_USERNAME=myuser
+export MONGO_ROOT_PASSWORD=mysecurepassword
+export SCHOOL_WALLET_ADDRESS=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+docker compose up --build
 ```
 
 > On older Docker installations, use `docker-compose` (with a hyphen) instead of `docker compose`.
 
 This will start:
-- MongoDB on port 27017
+- MongoDB on port 27017 (with authentication enabled)
 - Backend on port 5000
 - Frontend on port 3000
+
+**Security Note**: MongoDB is configured with root authentication. The default credentials (root/password) should be changed in production. Generate secure passwords with:
+
+```bash
+openssl rand -base64 32
+```
 
 ### Initial Setup: Seed Data
 

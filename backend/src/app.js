@@ -43,22 +43,19 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-School-ID', 'Idempotency-Key'],
 }));
+// The backend serves only JSON API responses — no HTML, scripts, or styles.
+// CSP directives for HTML content (scriptSrc, styleSrc, imgSrc, etc.) are
+// irrelevant here and have been removed. The frontend (Next.js) owns those.
+// We keep only the directives that are meaningful for an API endpoint.
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'"],
-      imgSrc: ["'self'"],
-      connectSrc: ["'self'"],
-      fontSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
-      frameSrc: ["'none'"],
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"],
     },
   },
   crossOriginEmbedderPolicy: false,
-  crossOriginResourcePolicy: { policy: "same-origin" },
+  crossOriginResourcePolicy: { policy: "cross-origin" },
 }));
 app.use(express.json());
 app.use(requestLogger());

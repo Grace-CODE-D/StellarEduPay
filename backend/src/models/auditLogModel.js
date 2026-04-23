@@ -26,4 +26,10 @@ auditLogSchema.index({ schoolId: 1, targetType: 1, createdAt: -1 });
 auditLogSchema.index({ schoolId: 1, performedBy: 1, createdAt: -1 });
 auditLogSchema.index({ createdAt: -1 });
 
+// TTL index for automatic document expiration
+// Default: 730 days (2 years), configurable via AUDIT_LOG_TTL_DAYS env var
+const ttlDays = parseInt(process.env.AUDIT_LOG_TTL_DAYS || '730', 10);
+const ttlSeconds = ttlDays * 24 * 60 * 60;
+auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: ttlSeconds });
+
 module.exports = mongoose.model('AuditLog', auditLogSchema);

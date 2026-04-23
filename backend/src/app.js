@@ -15,6 +15,7 @@ const schoolRoutes = require('./routes/schoolRoutes');
 const reminderRoutes = require('./routes/reminderRoutes');
 const disputeRoutes = require('./routes/disputeRoutes');
 const sourceValidationRuleRoutes = require('./routes/sourceValidationRuleRoutes');
+const feeAdjustmentRoutes = require('./routes/feeAdjustmentRoutes');
 
 const { startPolling, stopPolling } = require('./services/transactionPollingService');
 const { startRetryWorker, stopRetryWorker, isRetryWorkerRunning } = require('./services/retryService');
@@ -81,6 +82,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/disputes', disputeRoutes);
 app.use('/api/source-rules', sourceValidationRuleRoutes);
+app.use('/api/fee-adjustments', feeAdjustmentRoutes);
 app.get('/api/consistency', runConsistencyCheck);
 app.get('/health', healthCheck);
 

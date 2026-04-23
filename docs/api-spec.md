@@ -21,6 +21,7 @@ All error responses follow the [Error Responses](#error-responses) format.
 - [Retry Queue](#retry-queue)
 - [Health Check](#health-check)
 - [Error Responses](#error-responses)
+- [Fee Adjustment Rules](#fee-adjustment-rules)
 
 ---
 
@@ -1080,3 +1081,155 @@ Permanently delete a source validation rule by its MongoDB `_id`.
 | 403 | `INSUFFICIENT_ROLE` | Token does not have admin role |
 | 404 | `NOT_FOUND` | No rule found with the given id |
 
+
+## Fee Adjustment Rules
+
+Manage dynamic fee adjustment rules (discounts, penalties, waivers) scoped to a school.  
+All write endpoints require admin authentication and a school context header.
+
+### Rule Types
+
+| Type | Effect |
+|------|--------|
+| `discount_percentage` | Reduce fee by `value`% |
+| `discount_fixed` | Reduce fee by a fixed `value` amount |
+| `penalty_percentage` | Increase fee by `value`% |
+| `penalty_fixed` | Increase fee by a fixed `value` amount |
+| `waiver` | Waive the full fee (set to 0) |
+
+---
+
+#### POST /api/fee-adjustments
+
+Create a new fee adjustment rule for the school.
+
+**Headers:** `Authorization: Bearer <admin-token>`, `X-School-ID` or `X-School-Slug`
+
+**Request body:**
+
+```json
+{
+  "name": "Early Bird Discount",
+  "type": "discount_percentage",
+  "value": 10,
+  "conditions": {
+    "studentClass": ["JSS1", "JSS2"],
+    "paymentBefore": "2026-09-01T00:00:00.000Z"
+  },
+  "priority": 5,
+  "description": "10% discount for early payment"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | ✅ | Unique rule name within the school |
+| `type` | ✅ | One of the rule types above |
+| `value` | ✅ | Non-negative number (percentage or fixed amount) |
+| `conditions` | No | Object with optional `studentClass[]`, `academicYear`, `paymentBefore`, `paymentAfter`, `minAmount`, `maxAmount` |
+| `priority` | No | Lower number = applied first (default: 10) |
+| `description` | No | Human-readable description |
+
+**Response `201`:**
+
+```json
+{
+  "_id": "507f1f77bcf86cd799439011",
+  "schoolId": "SCH001",
+  "name": "Early Bird Discount",
+  "type": "discount_percentage",
+  "value": 10,
+  "conditions": { "studentClass": ["JSS1", "JSS2"], "paymentBefore": "2026-09-01T00:00:00.000Z" },
+  "priority": 5,
+  "isActive": true,
+  "description": "10% discount for early payment",
+  "createdAt": "2026-04-23T15:00:00.000Z",
+  "updatedAt": "2026-04-23T15:00:00.000Z"
+}
+```
+
+**Error responses:**
+
+| Status | Code | Reason |
+|--------|------|--------|
+| 400 | `VALIDATION_ERROR` | Missing or invalid fields |
+| 401 | `MISSING_AUTH_TOKEN` | No Bearer token provided |
+| 403 | `INSUFFICIENT_ROLE` | Token does not have admin role |
+| 409 | `DUPLICATE_RULE` | A rule with this name already exists for the school |
+
+---
+
+#### GET /api/fee-adjustments
+
+List all fee adjustment rules for the school (active and inactive).
+
+**Headers:** `X-School-ID` or `X-School-Slug`
+
+**Response `200`:**
+
+```json
+[
+  {
+    "_id": "507f1f77bcf86cd799439011",
+    "schoolId": "SCH001",
+    "name": "Early Bird Discount",
+    "type": "discount_percentage",
+    "value": 10,
+    "conditions": {},
+    "priority": 5,
+    "isActive": true,
+    "description": "10% discount for early payment"
+  }
+]
+```
+
+**Error responses:**
+
+| Status | Code | Reason |
+|--------|------|--------|
+| 400 | `MISSING_SCHOOL_CONTEXT` | No school header provided |
+| 404 | `SCHOOL_NOT_FOUND` | School not found or inactive |
+
+---
+
+#### PUT /api/fee-adjustments/:id
+
+Update an existing fee adjustment rule.
+
+**Headers:** `Authorization: Bearer <admin-token>`, `X-School-ID` or `X-School-Slug`
+
+**Request body:** Same fields as POST.
+
+**Response `200`:** Updated rule object.
+
+**Error responses:**
+
+| Status | Code | Reason |
+|--------|------|--------|
+| 400 | `VALIDATION_ERROR` | Missing or invalid fields |
+| 401 | `MISSING_AUTH_TOKEN` | No Bearer token provided |
+| 403 | `INSUFFICIENT_ROLE` | Token does not have admin role |
+| 404 | `NOT_FOUND` | No rule found with the given id for this school |
+| 409 | `DUPLICATE_RULE` | Another rule with this name already exists |
+
+---
+
+#### DELETE /api/fee-adjustments/:id
+
+Deactivate a fee adjustment rule (soft delete — sets `isActive: false`).
+
+**Headers:** `Authorization: Bearer <admin-token>`, `X-School-ID` or `X-School-Slug`
+
+**Response `200`:**
+
+```json
+{ "message": "Rule \"Early Bird Discount\" deactivated" }
+```
+
+**Error responses:**
+
+| Status | Code | Reason |
+|--------|------|--------|
+| 401 | `MISSING_AUTH_TOKEN` | No Bearer token provided |
+| 403 | `INSUFFICIENT_ROLE` | Token does not have admin role |
+| 404 | `NOT_FOUND` | No rule found with the given id for this school |

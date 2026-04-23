@@ -15,7 +15,11 @@ const schoolRoutes = require('./routes/schoolRoutes');
 const reminderRoutes = require('./routes/reminderRoutes');
 const disputeRoutes = require('./routes/disputeRoutes');
 const sourceValidationRuleRoutes = require('./routes/sourceValidationRuleRoutes');
+<<<<<<< fix/402-auto-generate-receipts-on-payment-success
+const receiptsRoutes = require('./routes/receiptsRoutes');
+=======
 const feeAdjustmentRoutes = require('./routes/feeAdjustmentRoutes');
+>>>>>>> main
 
 const { startPolling, stopPolling } = require('./services/transactionPollingService');
 const { startRetryWorker, stopRetryWorker, isRetryWorkerRunning } = require('./services/retryService');
@@ -79,7 +83,11 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/disputes', disputeRoutes);
 app.use('/api/source-rules', sourceValidationRuleRoutes);
+<<<<<<< fix/402-auto-generate-receipts-on-payment-success
+app.use('/api/receipts', receiptsRoutes);
+=======
 app.use('/api/fee-adjustments', feeAdjustmentRoutes);
+>>>>>>> main
 app.get('/api/consistency', runConsistencyCheck);
 app.get('/health', healthCheck);
 

@@ -487,6 +487,19 @@ async function verifyPayment(req, res, next) {
       verifiedAt: now,
     });
 
+    // Auto-generate receipt on payment success (fire-and-forget; never blocks the response)
+    createReceipt({
+      txHash: result.hash,
+      studentId: result.studentId || result.memo,
+      schoolId,
+      amount: result.amount,
+      assetCode: result.assetCode || 'XLM',
+      feeAmount: result.feeAmount,
+      feeValidationStatus: result.feeValidation.status,
+      memo: result.memo,
+      confirmedAt: result.date ? new Date(result.date) : now,
+    }).catch(() => { /* receipt failure must not break the payment response */ });
+
     const targetCurrency = req.school.localCurrency || "USD";
     const conversion = await convertToLocalCurrency(
       result.amount,
@@ -1045,6 +1058,7 @@ async function getAllPayments(req, res, next) {
 // ====================== OTHER FUNCTIONS (kept as-is, just cleaned) ======================
 
 const Receipt = require("../models/receiptModel");
+const { createReceipt } = require("../services/receiptService");
 
 async function generateReceipt(req, res, next) {
   try {

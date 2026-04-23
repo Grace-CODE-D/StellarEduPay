@@ -632,6 +632,43 @@ Optimistic locking for concurrent update protection.
 
 ---
 
+## Receipts
+
+All receipt routes require school context (`X-School-ID` header).
+
+Receipts are automatically generated when a payment reaches `SUCCESS` status via
+`POST /api/payments/verify`. They can also be retrieved at any time by transaction hash.
+
+### Get a receipt
+
+```
+GET /api/receipts/:txHash
+X-School-ID: SCH-3F2A
+```
+
+**Response `200`**
+```json
+{
+  "txHash": "abc123def456...",
+  "studentId": "STU001",
+  "studentName": "Alice Johnson",
+  "schoolId": "SCH-3F2A",
+  "schoolName": "Lincoln High",
+  "amount": 250,
+  "assetCode": "XLM",
+  "feeAmount": 250,
+  "feeValidationStatus": "valid",
+  "memo": "STU001",
+  "confirmedAt": "2026-03-24T10:00:00.000Z",
+  "issuedAt": "2026-03-24T10:00:01.000Z"
+}
+```
+
+**Errors**
+- `404 NOT_FOUND` — no receipt exists for this transaction hash in this school
+
+---
+
 ## Reports
 
 All report routes require school context.

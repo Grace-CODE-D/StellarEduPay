@@ -29,12 +29,15 @@ const { healthCheck } = require('./controllers/healthController');
 const logger = require('./utils/logger');
 
 const morgan = require('morgan');
+const { parseAllowedOrigins } = require('./utils/corsOrigins');
+
+const allowedOrigins = parseAllowedOrigins();
 
 const app = express();
 
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGIN || 'http://localhost:3000',
+  origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-School-ID', 'Idempotency-Key'],
 }));

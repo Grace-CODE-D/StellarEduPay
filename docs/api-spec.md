@@ -692,7 +692,8 @@ X-School-ID: SCH-3F2A
   "generatedAt": "2026-03-24T10:00:00.000Z",
   "period": { "startDate": "2026-01-01", "endDate": "2026-03-31" },
   "summary": { "totalAmount": 1250, "paymentCount": 5, "validCount": 4, "overpaidCount": 1, "underpaidCount": 0, "fullyPaidStudentCount": 4 },
-  "byDate": [{ "date": "2026-03-24", "totalAmount": 500, "paymentCount": 2, "uniqueStudentCount": 2 }]
+  "byDate": [{ "date": "2026-03-24", "totalAmount": 500, "paymentCount": 2, "uniqueStudentCount": 2 }],
+  "byClass": [{ "className": "Grade 5A", "totalCollected": 750, "paymentCount": 3, "paidCount": 3, "unpaidCount": 1 }]
 }
 ```
 

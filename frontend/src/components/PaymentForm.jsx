@@ -33,8 +33,8 @@ export default function PaymentForm() {
       setStudent(stuRes.data);
       setInstructions(instrRes.data);
       setPayments(payRes.data?.payments ?? payRes.data ?? []);
-    } catch {
-      setError("Student not found. Please check the ID.");
+    } catch (err) {
+      setError(err.response?.data?.error || "Student not found. Please check the ID and try again.");
       errorRef.current?.focus();
     } finally {
       setLoading(false);

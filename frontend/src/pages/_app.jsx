@@ -21,8 +21,8 @@ export default function MyApp({ Component, pageProps }) {
 
   return (
     <ThemeContext.Provider value={{ dark, toggle: () => setDark((d) => !d) }}>
+      <Navbar />
       <ErrorBoundary>
-        <Navbar />
         <Component {...pageProps} />
       </ErrorBoundary>
     </ThemeContext.Provider>

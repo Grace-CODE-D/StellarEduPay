@@ -57,7 +57,7 @@ export default function AuditLogsPage() {
         setPage(data.page);
       })
       .catch((err) => {
-        setError("Failed to load audit logs");
+        setError(err.response?.data?.error || "Failed to load audit logs. Please try again.");
         console.error(err);
       })
       .finally(() => setLoading(false));

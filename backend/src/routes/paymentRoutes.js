@@ -76,7 +76,7 @@ router.get("/events", streamPaymentEvents);
 router.get("/overpayments", getOverpayments);
 router.get("/suspicious", getSuspiciousPayments);
 router.get("/pending", getPendingPayments);
-router.get("/retry-queue", getRetryQueue);
+router.get("/retry-queue", requireAdminAuth, getRetryQueue);
 router.get("/rates", getExchangeRates);
 router.get("/dlq", getDeadLetterJobs);
 

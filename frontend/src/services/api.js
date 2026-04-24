@@ -7,6 +7,16 @@ const api = axios.create({
   timeout: TIMEOUT_MS,
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && typeof window !== "undefined") {
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
+);
+
 export const getStudents = (page = 1, limit = 50) =>
   api.get("/students", { params: { page, limit } });
 export const registerStudent = (data) => api.post("/students", data);

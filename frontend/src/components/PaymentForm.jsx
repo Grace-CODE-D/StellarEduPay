@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { generateStellarPaymentUri } from "../utils/stellarUri";
 import { getStudent, getPaymentInstructions, getStudentPayments } from "../services/api";
@@ -19,16 +19,29 @@ export default function PaymentForm() {
   const [loading, setLoading]         = useState(false);
   const [copied, setCopied]           = useState(null);
   const errorRef = useRef(null);
+  const debounceRef = useRef(null);
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  function handleStudentIdChange(e) {
+    const value = e.target.value;
+    setStudentId(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, []);
+
+  const lookupStudent = useCallback(async (id) => {
+    if (!id.trim()) return;
     setError(""); setStudent(null); setInstructions(null); setPayments(null);
     setLoading(true);
     try {
       const [stuRes, instrRes, payRes] = await Promise.all([
-        getStudent(studentId),
-        getPaymentInstructions(studentId),
-        getStudentPayments(studentId),
+        getStudent(id),
+        getPaymentInstructions(id),
+        getStudentPayments(id),
       ]);
       setStudent(stuRes.data);
       setInstructions(instrRes.data);
@@ -39,7 +52,7 @@ export default function PaymentForm() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   async function copy(text, key) {
     await navigator.clipboard.writeText(text).catch(() => {});
@@ -73,11 +86,16 @@ export default function PaymentForm() {
           Enter your student ID to get payment instructions.
         </p>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={(e) => { e.preventDefault(); lookupStudent(studentId); }}>
           <label htmlFor="sid" className="pf-label">Student ID</label>
           <input
             id="sid" type="text" placeholder="e.g. STU001"
-            value={studentId} onChange={e => setStudentId(e.target.value)}
+            value={studentId}
+            onChange={(e) => {
+              handleStudentIdChange(e);
+              const val = e.target.value;
+              debounceRef.current = setTimeout(() => lookupStudent(val), 400);
+            }}
             required className="pf-input"
           />
           <button type="submit" disabled={loading} className="btn-primary" style={{ width: "100%" }}>

@@ -38,6 +38,19 @@ html.dark h1, html.dark h2, html.dark h3, html.dark h4 {
   color: var(--text);
 }
 
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #1e293b;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: var(--muted);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

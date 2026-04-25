@@ -153,7 +153,7 @@ async function deleteFeeStructure(req, res, next) {
 async function updateFeeStructure(req, res, next) {
   try {
     const { className } = req.params;
-    const { feeAmount, description, paymentDeadline } = req.body;
+    const { feeAmount, description, academicYear, paymentDeadline, cascadeToStudents } = req.body;
 
     if (feeAmount == null) {
       const err = new Error('feeAmount is required');
@@ -161,13 +161,15 @@ async function updateFeeStructure(req, res, next) {
       return next(err);
     }
 
+    // Build update object — only include fields explicitly provided
+    const updateFields = { feeAmount };
+    if (description !== undefined) updateFields.description = description;
+    if (academicYear !== undefined) updateFields.academicYear = academicYear;
+    if (paymentDeadline !== undefined) updateFields.paymentDeadline = paymentDeadline;
+
     const fee = await FeeStructure.findOneAndUpdate(
       { schoolId: req.schoolId, className, isActive: true },
-      {
-        feeAmount,
-        description: description !== undefined ? description : undefined,
-        paymentDeadline: paymentDeadline !== undefined ? paymentDeadline : undefined,
-      },
+      updateFields,
       { new: true, runValidators: true }
     );
 
@@ -180,6 +182,17 @@ async function updateFeeStructure(req, res, next) {
     // Invalidate fee caches
     del(KEYS.feesAll(), KEYS.feeByClass(className));
 
+    // Optionally cascade feeAmount update to all students in this class
+    let studentsUpdated = 0;
+    if (cascadeToStudents === true) {
+      const Student = require('../models/studentModel');
+      const result = await Student.updateMany(
+        { schoolId: req.schoolId, class: className, deletedAt: null },
+        { feeAmount, remainingBalance: null }
+      );
+      studentsUpdated = result.modifiedCount || 0;
+    }
+
     // Audit log
     if (req.auditContext) {
       await logAudit({
@@ -188,14 +201,14 @@ async function updateFeeStructure(req, res, next) {
         performedBy: req.auditContext.performedBy,
         targetId: className,
         targetType: 'fee',
-        details: { className, feeAmount, description, paymentDeadline },
+        details: { className, feeAmount, description, academicYear, paymentDeadline, cascadeToStudents, studentsUpdated },
         result: 'success',
         ipAddress: req.auditContext.ipAddress,
         userAgent: req.auditContext.userAgent,
       });
     }
 
-    res.json(fee);
+    res.json({ fee, studentsUpdated });
   } catch (err) {
     next(err);
   }

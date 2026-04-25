@@ -300,6 +300,36 @@ Sets `isActive: false`. Record is retained for audit.
 { "message": "Fee structure for class Grade 5A deactivated" }
 ```
 
+### Update a fee structure — admin only
+```
+PUT /api/fees/:className
+Authorization: Bearer <token>
+X-School-ID: SCH-3F2A
+```
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `feeAmount` | number | Yes | New fee amount (positive) |
+| `description` | string | No | |
+| `academicYear` | string | No | e.g. `"2026"` |
+| `paymentDeadline` | string | No | ISO date string |
+| `cascadeToStudents` | boolean | No | If `true`, updates `feeAmount` on all students in this class |
+
+**Response `200`**
+```json
+{
+  "fee": { "className": "Grade 5A", "feeAmount": 300, "description": "Updated fee", "academicYear": "2026", "isActive": true },
+  "studentsUpdated": 42
+}
+```
+`studentsUpdated` is `0` when `cascadeToStudents` is omitted or `false`.
+
+**Errors**
+- `400 VALIDATION_ERROR` — `feeAmount` missing
+- `404 NOT_FOUND` — no active fee structure for this class
+
 ---
 
 ## Payments

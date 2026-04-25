@@ -78,10 +78,23 @@ HTTP 400
 ```
 GET /api/schools
 ```
+Returns only active schools by default.
+
+**Query parameters**
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `includeInactive` | boolean | `false` | If `true`, returns all schools including inactive. Requires admin auth. |
+
 **Response `200`**
 ```json
 [{ "schoolId": "SCH-3F2A", "name": "Lincoln High", "slug": "lincoln-high", "stellarAddress": "G...", "network": "testnet", "isActive": true }]
 ```
+
+**Errors (when `?includeInactive=true`)**
+- `401 MISSING_AUTH_TOKEN` — no Bearer token provided
+- `401 INVALID_AUTH_TOKEN` — token is invalid or expired
+- `403 INSUFFICIENT_ROLE` — token does not have admin role
 
 ### Get a school
 ```

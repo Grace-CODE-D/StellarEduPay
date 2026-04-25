@@ -70,7 +70,27 @@ async function createSchool(req, res, next) {
 // GET /api/schools
 async function getAllSchools(req, res, next) {
   try {
-    const schools = await School.find({ isActive: true }).sort({ name: 1 }).lean();
+    const includeInactive = req.query.includeInactive === 'true';
+
+    // ?includeInactive=true is admin-only — verify JWT inline
+    if (includeInactive) {
+      const jwt = require('jsonwebtoken');
+      const authHeader = req.headers['authorization'];
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(401).json({ error: 'Authentication required to include inactive schools.', code: 'MISSING_AUTH_TOKEN' });
+      }
+      try {
+        const decoded = jwt.verify(authHeader.slice(7), process.env.JWT_SECRET);
+        if (decoded.role !== 'admin') {
+          return res.status(403).json({ error: 'Admin role required to include inactive schools.', code: 'INSUFFICIENT_ROLE' });
+        }
+      } catch {
+        return res.status(401).json({ error: 'Invalid token.', code: 'INVALID_AUTH_TOKEN' });
+      }
+    }
+
+    const query = includeInactive ? {} : { isActive: true };
+    const schools = await School.find(query).sort({ name: 1 }).lean();
     res.json(schools);
   } catch (err) {
     next(err);

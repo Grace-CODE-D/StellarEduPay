@@ -381,7 +381,7 @@ node scripts/create-school-wallet.js
 
 This will output:
 ```
-Public Key:  GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+Public Key:  G_EXAMPLE_SCHOOL_WALLET_ADDRESS_HERE
 Secret Key:  SXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 ⚠️  Save the secret key securely! The backend only needs the public key.
@@ -435,7 +435,7 @@ Edit `backend/.env` with your configuration:
 MONGO_URI=mongodb://localhost:27017/stellaredupay
 
 # School's Stellar public key (from Step 2)
-SCHOOL_WALLET_ADDRESS=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+SCHOOL_WALLET_ADDRESS=G_EXAMPLE_SCHOOL_WALLET_ADDRESS_HERE
 
 # ── Stellar Network ──────────────────────────────────────────
 # Use "testnet" for development, "mainnet" for production
@@ -513,7 +513,7 @@ Visit **http://localhost:3000** in your browser.
 ```bash
 # From the project root — replace the value with your actual public key
 # MongoDB credentials are set via environment variables (defaults: root/password)
-SCHOOL_WALLET_ADDRESS=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX docker compose up --build
+SCHOOL_WALLET_ADDRESS=G_EXAMPLE_SCHOOL_WALLET_ADDRESS_HERE docker compose up --build
 ```
 
 To use custom MongoDB credentials, set them before running:
@@ -521,7 +521,7 @@ To use custom MongoDB credentials, set them before running:
 ```bash
 export MONGO_ROOT_USERNAME=myuser
 export MONGO_ROOT_PASSWORD=mysecurepassword
-export SCHOOL_WALLET_ADDRESS=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+export SCHOOL_WALLET_ADDRESS=G_EXAMPLE_SCHOOL_WALLET_ADDRESS_HERE
 docker compose up --build
 ```
 
@@ -575,7 +575,7 @@ curl http://localhost:5000/api/payments/instructions/STU001
 Response:
 ```json
 {
-  "walletAddress": "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "walletAddress": "G_EXAMPLE_SCHOOL_WALLET_ADDRESS_HERE",
   "memo": "STU001",
   "acceptedAssets": [
     { "code": "XLM", "type": "native", "displayName": "Stellar Lumens" },
@@ -709,7 +709,7 @@ GET /api/payments/instructions/STU001
 Response `200`:
 ```json
 {
-  "walletAddress": "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "walletAddress": "G_EXAMPLE_SCHOOL_WALLET_ADDRESS_HERE",
   "memo": "STU001",
   "acceptedAssets": [
     {

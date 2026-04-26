@@ -18,7 +18,7 @@ const paymentSchema = new mongoose.Schema(
     assetCode: { type: String, default: null },
     assetType: { type: String, default: null },
 
-    status: { type: String, enum: ['PENDING', 'SUBMITTED', 'SUCCESS', 'FAILED'], default: 'PENDING' },
+    status: { type: String, enum: ['PENDING', 'SUBMITTED', 'SUCCESS', 'FAILED', 'DISPUTED', 'INVALID'], default: 'PENDING' },
     memo: { type: String },
     senderAddress: { type: String, default: null },
     isSuspicious: { type: Boolean, default: false },

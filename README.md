@@ -388,20 +388,22 @@ npm install
 
 #### Step 4: Configure Backend Environment Variables
 
-Create a `.env` file in the `backend/` directory:
-
-Create your local environment file by copying the unified template:
+Copy `backend/.env.example` to `backend/.env` and fill in real values:
 
 ```bash
-cp .env.example .env
+cp backend/.env.example backend/.env
 ```
 
-Open `.env` and configure your credentials (e.g., set `SCHOOL_WALLET_ADDRESS` slightly generated above).
+Open `backend/.env` and replace every placeholder with your actual credentials
+(e.g. set `SCHOOL_WALLET_ADDRESS` to the public key generated in Step 2,
+and set `JWT_SECRET` to a long random string).
 
-For the frontend, specify the backend API URL in **`frontend/.env.local`**:
+> `backend/.env.example` contains only placeholder values — never real secrets.
+> See the inline comments in that file for how to generate each value.
+
+For the frontend, copy its example file as well:
 ```bash
-cd backend
-cp .env.example .env
+cp frontend/.env.example frontend/.env.local
 ```
 
 Edit `backend/.env` with your configuration:

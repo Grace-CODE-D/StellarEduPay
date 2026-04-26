@@ -13,6 +13,33 @@
 
 const { logger } = require('../utils/logger');
 
+// ── Redis client (optional) ────────────────────────────────────────────────────
+// When REDIS_HOST is configured, rate-limit counters are stored in Redis so
+// they survive server restarts and are shared across multiple instances.
+// Without REDIS_HOST the middleware falls back to an in-process Map, which
+// resets on restart (acceptable for single-process / development deployments).
+let _redisClient = null;
+function getRedisClient() {
+  if (_redisClient) return _redisClient;
+  if (!process.env.REDIS_HOST) return null;
+  try {
+    const Redis = require('ioredis');
+    _redisClient = new Redis({
+      host: process.env.REDIS_HOST,
+      port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+      password: process.env.REDIS_PASSWORD || undefined,
+      lazyConnect: true,
+      enableOfflineQueue: false,
+    });
+    _redisClient.on('error', (err) =>
+      logger.error('[RateLimiter] Redis error — falling back to in-memory', { error: err.message })
+    );
+    return _redisClient;
+  } catch {
+    return null;
+  }
+}
+
 // ── Circuit Breaker States ─────────────────────────────────────────────────────
 const CIRCUIT_STATES = {
   CLOSED: 'closed',      // Normal operation
@@ -251,6 +278,17 @@ class RequestDeduplicator {
   }
 }
 
+// ── In-memory rate-limit helper ────────────────────────────────────────────────
+function _inMemoryIncrement(store, key, now, windowStart) {
+  let entry = store.get(key);
+  if (!entry || entry.windowStart < windowStart) {
+    entry = { windowStart: now, count: 0 };
+  }
+  entry.count++;
+  store.set(key, entry);
+  return entry.count;
+}
+
 // ── Middleware Factory ──────────────────────────────────────────────────────────
 function createConcurrentRequestMiddleware(options = {}) {
   const circuitBreaker = new CircuitBreaker(options.circuitBreaker || {});
@@ -289,24 +327,41 @@ function createConcurrentRequestMiddleware(options = {}) {
 
     // ── Rate Limiter Middleware ───────────────────────────────────────────────
     rateLimiter: (getKey) => {
-      const rateLimits = new Map();
+      // In-memory fallback store (used when Redis is unavailable).
+      const memoryStore = new Map();
       const windowMs = options.rateLimit?.windowMs || 60000;
       const maxRequests = options.rateLimit?.maxRequests || 100;
 
       return async (req, res, next) => {
-        const key = getKey(req);
+        const key = `rl:${getKey(req)}`;
         const now = Date.now();
         const windowStart = now - windowMs;
+        const redis = getRedisClient();
 
-        let limit = rateLimits.get(key);
-        if (!limit || limit.windowStart < windowStart) {
-          limit = { windowStart: now, count: 0 };
+        let count;
+        if (redis && redis.status !== 'end') {
+          try {
+            // Atomic increment + expiry using a Redis pipeline.
+            // Key format: "rl:<clientKey>:<window-bucket>" where the bucket
+            // is the start of the current window (floored to windowMs).
+            const bucket = Math.floor(now / windowMs) * windowMs;
+            const redisKey = `${key}:${bucket}`;
+            const ttlSec = Math.ceil(windowMs / 1000) + 1;
+            const [[, cnt]] = await redis
+              .pipeline()
+              .incr(redisKey)
+              .expire(redisKey, ttlSec)
+              .exec();
+            count = cnt;
+          } catch (err) {
+            logger.warn('[RateLimiter] Redis op failed, using in-memory fallback', { error: err.message });
+            count = _inMemoryIncrement(memoryStore, key, now, windowStart);
+          }
+        } else {
+          count = _inMemoryIncrement(memoryStore, key, now, windowStart);
         }
 
-        limit.count++;
-        rateLimits.set(key, limit);
-
-        if (limit.count > maxRequests) {
+        if (count > maxRequests) {
           const retryAfter = Math.ceil(windowMs / 1000);
           res.set('Retry-After', retryAfter);
           return res.status(429).json({
@@ -318,8 +373,8 @@ function createConcurrentRequestMiddleware(options = {}) {
 
         res.set({
           'X-RateLimit-Limit': maxRequests,
-          'X-RateLimit-Remaining': maxRequests - limit.count,
-          'X-RateLimit-Reset': Math.ceil((limit.windowStart + windowMs) / 1000),
+          'X-RateLimit-Remaining': maxRequests - count,
+          'X-RateLimit-Reset': Math.ceil((Math.floor(now / windowMs) * windowMs + windowMs) / 1000),
         });
 
         next();
@@ -544,4 +599,8 @@ module.exports = {
   CircuitBreaker,
   RequestQueue,
   RequestDeduplicator,
+  // exported for testing
+  _inMemoryIncrement,
+  _getRedisClient: getRedisClient,
+  _resetRedisClient: () => { _redisClient = null; },
 };

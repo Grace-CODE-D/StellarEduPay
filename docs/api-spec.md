@@ -383,7 +383,7 @@ Returns the school wallet address and memo the parent must include when sending 
 **Response `200`**
 ```json
 {
-  "walletAddress": "GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  "walletAddress": "G_EXAMPLE_SCHOOL_WALLET_ADDRESS_HERE",
   "memo": "STU001",
   "feeAmount": 250,
   "acceptedAssets": [

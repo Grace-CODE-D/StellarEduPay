@@ -69,7 +69,7 @@ You should never need to change `HORIZON_URL` manually — switching `STELLAR_NE
 
 ```env
 STELLAR_NETWORK=testnet
-SCHOOL_WALLET_ADDRESS=GXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+SCHOOL_WALLET_ADDRESS=G_EXAMPLE_SCHOOL_WALLET_ADDRESS_HERE
 ```
 
 Alternatively, generate a wallet from the command line:

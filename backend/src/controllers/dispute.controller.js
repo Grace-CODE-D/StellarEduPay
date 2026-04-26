@@ -63,19 +63,19 @@ async function getDisputeById(req, res, next) {
 
 async function resolveDispute(req, res, next) {
   try {
-    const { schoolId } = req;
-    const { resolvedBy, resolutionNote, status } = req.body;
-    if (!resolvedBy || !resolutionNote) {
-      return res.status(400).json({ error: 'resolvedBy and resolutionNote are required.', code: 'VALIDATION_ERROR' });
+    const { schoolId, user } = req;
+    const { resolutionNote, status } = req.body;
+    
+    // Extract admin identifier from authenticated user (JWT payload)
+    const resolvedBy = user?.email || user?.id || user?.sub || 'admin';
+    
+    if (!resolutionNote) {
+      return res.status(400).json({ error: 'resolutionNote is required.', code: 'VALIDATION_ERROR' });
     }
     
     // Validate field lengths
-    const resolvedByTrimmed = resolvedBy.trim();
     const resolutionNoteTrimmed = resolutionNote.trim();
     
-    if (resolvedByTrimmed.length > 200) {
-      return res.status(400).json({ error: 'resolvedBy must not exceed 200 characters.', code: 'VALIDATION_ERROR' });
-    }
     if (resolutionNoteTrimmed.length > 1000) {
       return res.status(400).json({ error: 'resolutionNote must not exceed 1000 characters.', code: 'VALIDATION_ERROR' });
     }
@@ -84,7 +84,7 @@ async function resolveDispute(req, res, next) {
     const newStatus = status && ALLOWED.includes(status) ? status : 'resolved';
     const dispute = await Dispute.findOneAndUpdate(
       { _id: req.params.id, schoolId, status: { $in: ['open', 'under_review'] } },
-      { $set: { status: newStatus, resolvedBy: resolvedByTrimmed, resolutionNote: resolutionNoteTrimmed, resolvedAt: ['resolved', 'rejected'].includes(newStatus) ? new Date() : null } },
+      { $set: { status: newStatus, resolvedBy, resolutionNote: resolutionNoteTrimmed, resolvedAt: ['resolved', 'rejected'].includes(newStatus) ? new Date() : null } },
       { new: true }
     );
     if (!dispute) return res.status(404).json({ error: 'Dispute not found or already closed.', code: 'NOT_FOUND' });

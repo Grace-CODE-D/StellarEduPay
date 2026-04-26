@@ -341,12 +341,30 @@ async function submitTransaction(req, res, next) {
  *   502 — STELLAR_NETWORK_ERROR
  */
 async function verifyPayment(req, res, next) {
+  const startTime = Date.now();
+  const ipAddress = req.ip || req.connection?.remoteAddress || null;
+  const userAgent = req.get('user-agent') || null;
+  
   try {
     const { schoolId } = req;
     const { txHash } = req.body;
 
     const hashValidation = validateTransactionHash(txHash);
     if (!hashValidation.valid) {
+      // Log failed validation attempt
+      await logAudit({
+        schoolId,
+        action: 'payment_verify',
+        performedBy: req.user?.email || req.user?.id || 'anonymous',
+        targetId: txHash,
+        targetType: 'payment',
+        details: { txHash, validationError: hashValidation.error },
+        result: 'failure',
+        errorMessage: hashValidation.error,
+        ipAddress,
+        userAgent,
+      });
+      
       const err = new Error(hashValidation.error);
       err.code = hashValidation.code;
       return next(err);
@@ -357,6 +375,19 @@ async function verifyPayment(req, res, next) {
     // Check if payment already exists (idempotency)
     const existing = await Payment.findOne({ txHash: normalizedHash });
     if (existing) {
+      // Log cached verification
+      await logAudit({
+        schoolId,
+        action: 'payment_verify',
+        performedBy: req.user?.email || req.user?.id || 'anonymous',
+        targetId: normalizedHash,
+        targetType: 'payment',
+        details: { txHash: normalizedHash, cached: true, studentId: existing.studentId, amount: existing.amount },
+        result: 'success',
+        ipAddress,
+        userAgent,
+      });
+      
       // Return cached result instead of error
       const targetCurrency = req.school.localCurrency || "USD";
       const conversion = await convertToLocalCurrency(
@@ -405,6 +436,20 @@ async function verifyPayment(req, res, next) {
       );
     } catch (stellarErr) {
       if (PERMANENT_FAIL_CODES.includes(stellarErr.code)) {
+        // Log permanent failure
+        await logAudit({
+          schoolId,
+          action: 'payment_verify',
+          performedBy: req.user?.email || req.user?.id || 'anonymous',
+          targetId: normalizedHash,
+          targetType: 'payment',
+          details: { txHash: normalizedHash, errorCode: stellarErr.code },
+          result: 'failure',
+          errorMessage: stellarErr.message,
+          ipAddress,
+          userAgent,
+        });
+        
         await Payment.create({
           schoolId,
           studentId: "unknown",
@@ -416,6 +461,19 @@ async function verifyPayment(req, res, next) {
         return next(stellarErr);
       }
 
+      // Log queued for retry
+      await logAudit({
+        schoolId,
+        action: 'payment_verify',
+        performedBy: req.user?.email || req.user?.id || 'anonymous',
+        targetId: normalizedHash,
+        targetType: 'payment',
+        details: { txHash: normalizedHash, queuedForRetry: true, reason: stellarErr.message },
+        result: 'success',
+        ipAddress,
+        userAgent,
+      });
+      
       await queueForRetry(
         normalizedHash,
         req.body.studentId || null,
@@ -431,6 +489,20 @@ async function verifyPayment(req, res, next) {
     }
 
     if (!result) {
+      // Log not found
+      await logAudit({
+        schoolId,
+        action: 'payment_verify',
+        performedBy: req.user?.email || req.user?.id || 'anonymous',
+        targetId: normalizedHash,
+        targetType: 'payment',
+        details: { txHash: normalizedHash },
+        result: 'failure',
+        errorMessage: 'Transaction found but contains no valid payment to this school wallet',
+        ipAddress,
+        userAgent,
+      });
+      
       return res.status(404).json({
         error:
           "Transaction found but contains no valid payment to this school wallet",
@@ -441,6 +513,20 @@ async function verifyPayment(req, res, next) {
     const studentStrId = result.studentId || result.memo;
     const studentObj = await Student.findOne({ studentId: studentStrId });
     if (!studentObj) {
+      // Log student not found
+      await logAudit({
+        schoolId,
+        action: 'payment_verify',
+        performedBy: req.user?.email || req.user?.id || 'anonymous',
+        targetId: normalizedHash,
+        targetType: 'payment',
+        details: { txHash: normalizedHash, studentId: studentStrId },
+        result: 'failure',
+        errorMessage: 'Associated student not found',
+        ipAddress,
+        userAgent,
+      });
+      
       return res.status(404).json({
         error: "Associated student not found. Cannot record transaction.",
       });
@@ -449,6 +535,21 @@ async function verifyPayment(req, res, next) {
     const intent = await PaymentIntent.findOne({ memo: result.memo, schoolId });
     if (intent && intent.expiresAt && intent.expiresAt < new Date()) {
       await PaymentIntent.findByIdAndUpdate(intent._id, { status: "expired" });
+      
+      // Log expired intent
+      await logAudit({
+        schoolId,
+        action: 'payment_verify',
+        performedBy: req.user?.email || req.user?.id || 'anonymous',
+        targetId: normalizedHash,
+        targetType: 'payment',
+        details: { txHash: normalizedHash, intentExpired: true },
+        result: 'failure',
+        errorMessage: 'Payment intent has expired',
+        ipAddress,
+        userAgent,
+      });
+      
       const err = new Error(
         "Payment intent has expired. Please request new payment instructions.",
       );
@@ -458,6 +559,26 @@ async function verifyPayment(req, res, next) {
     }
 
     if (result.feeValidation.status === "underpaid") {
+      // Log underpayment
+      await logAudit({
+        schoolId,
+        action: 'payment_verify',
+        performedBy: req.user?.email || req.user?.id || 'anonymous',
+        targetId: normalizedHash,
+        targetType: 'payment',
+        details: { 
+          txHash: normalizedHash, 
+          studentId: studentStrId,
+          amount: result.amount,
+          required: result.feeAmount,
+          underpaid: true 
+        },
+        result: 'failure',
+        errorMessage: result.feeValidation.message,
+        ipAddress,
+        userAgent,
+      });
+      
       const err = new Error(result.feeValidation.message);
       err.code = "UNDERPAID";
       err.status = 400;
@@ -486,6 +607,27 @@ async function verifyPayment(req, res, next) {
       confirmationStatus: "confirmed",
       confirmedAt: result.date ? new Date(result.date) : now,
       verifiedAt: now,
+    });
+
+    // Log successful verification
+    const duration = Date.now() - startTime;
+    await logAudit({
+      schoolId,
+      action: 'payment_verify',
+      performedBy: req.user?.email || req.user?.id || 'anonymous',
+      targetId: normalizedHash,
+      targetType: 'payment',
+      details: { 
+        txHash: normalizedHash,
+        studentId: result.studentId || result.memo,
+        amount: result.amount,
+        assetCode: result.assetCode || 'XLM',
+        feeValidationStatus: result.feeValidation.status,
+        duration: `${duration}ms`
+      },
+      result: 'success',
+      ipAddress,
+      userAgent,
     });
 
     // Auto-generate receipt on payment success (fire-and-forget; never blocks the response)
@@ -533,6 +675,20 @@ async function verifyPayment(req, res, next) {
       },
     });
   } catch (err) {
+    // Log unexpected errors
+    await logAudit({
+      schoolId: req.schoolId,
+      action: 'payment_verify',
+      performedBy: req.user?.email || req.user?.id || 'anonymous',
+      targetId: req.body?.txHash || 'unknown',
+      targetType: 'payment',
+      details: { error: err.message, stack: err.stack },
+      result: 'failure',
+      errorMessage: err.message,
+      ipAddress,
+      userAgent,
+    }).catch(() => { /* audit failure must not block error handling */ });
+    
     next(err);
   }
 }

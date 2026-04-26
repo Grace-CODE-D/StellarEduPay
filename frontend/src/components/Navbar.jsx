@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/pay-fees", label: "Pay Fees" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/reports", label: "Reports" },
+  { href: "/fee-adjustments", label: "Fee Rules" },
 ];
 
 export default function Navbar() {

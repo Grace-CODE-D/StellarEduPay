@@ -53,3 +53,13 @@ export const getRecentAuditLogs = (limit = 10) =>
   api.get("/audit-logs/recent", { params: { limit } });
 export const getAuditLogs = (params = {}) =>
   api.get("/audit-logs", { params });
+
+// Fee adjustment rules
+export const getFeeAdjustmentRules = (schoolId) =>
+  api.get("/fee-adjustments", { headers: { "X-School-ID": schoolId } });
+export const createFeeAdjustmentRule = (data, schoolId) =>
+  api.post("/fee-adjustments", data, { headers: { "X-School-ID": schoolId } });
+export const updateFeeAdjustmentRule = (id, data, schoolId) =>
+  api.put(`/fee-adjustments/${id}`, data, { headers: { "X-School-ID": schoolId } });
+export const deleteFeeAdjustmentRule = (id, schoolId) =>
+  api.delete(`/fee-adjustments/${id}`, { headers: { "X-School-ID": schoolId } });

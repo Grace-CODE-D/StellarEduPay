@@ -1280,6 +1280,25 @@ All write endpoints require admin authentication and a school context header.
 | `penalty_fixed` | Increase fee by a fixed `value` amount |
 | `waiver` | Waive the full fee (set to 0) |
 
+### Rule Application Order
+
+Rules are applied **in ascending `priority` order** (lower number = applied first). Each rule operates on the fee amount left by the previous rule, so order matters when rules interact.
+
+**Example:** base fee = 1000, two active rules:
+
+| Priority | Name | Type | Value |
+|----------|------|------|-------|
+| 5 | Early Bird | `discount_percentage` | 10 |
+| 20 | Late Penalty | `penalty_fixed` | 50 |
+
+Application:
+1. Priority 5 — 10% discount: 1000 → 900
+2. Priority 20 — flat penalty: 900 → 950
+
+If the priorities were reversed the result would differ (50 added first, then 10% taken off). Assign lower `priority` numbers to rules that should run first. Rules with equal priority are ordered alphabetically by name.
+
+A `waiver` rule immediately sets the fee to 0 and stops further processing.
+
 ---
 
 #### POST /api/fee-adjustments

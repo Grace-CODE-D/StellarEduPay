@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/router';
 import TestnetBanner from './TestnetBanner';
@@ -15,6 +15,9 @@ export default function Navbar() {
   const { pathname } = useRouter();
   const [open, setOpen] = useState(false);
   const { dark, toggle } = useTheme();
+
+  // Close the mobile menu on every route change, including browser back/forward.
+  useEffect(() => { setOpen(false); }, [pathname]);
 
   return (
     <>

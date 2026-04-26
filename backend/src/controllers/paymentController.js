@@ -1471,6 +1471,67 @@ function streamPaymentEvents(req, res) {
   });
 }
 
+// Allowed manual status transitions: from → [to, ...]
+const ALLOWED_TRANSITIONS = {
+  SUCCESS:   ['DISPUTED'],
+  PENDING:   ['FAILED'],
+  SUBMITTED: ['FAILED'],
+};
+
+/**
+ * PATCH /api/payments/:txHash/status
+ * Admin-only. Manually override a payment status with a mandatory reason.
+ * Allowed transitions: SUCCESS → DISPUTED, PENDING/SUBMITTED → FAILED.
+ */
+async function updatePaymentStatus(req, res, next) {
+  try {
+    const { txHash } = req.params;
+    const { status: newStatus, reason } = req.body;
+
+    if (!newStatus || !reason) {
+      return res.status(400).json({ error: 'status and reason are required', code: 'VALIDATION_ERROR' });
+    }
+
+    const payment = await Payment.findOne({ schoolId: req.schoolId, txHash }).lean();
+    if (!payment) {
+      const err = new Error('Payment not found');
+      err.code = 'NOT_FOUND';
+      return next(err);
+    }
+
+    const allowed = ALLOWED_TRANSITIONS[payment.status] || [];
+    if (!allowed.includes(newStatus)) {
+      return res.status(400).json({
+        error: `Cannot transition from ${payment.status} to ${newStatus}`,
+        code: 'INVALID_TRANSITION',
+      });
+    }
+
+    const updated = await Payment.findOneAndUpdate(
+      { schoolId: req.schoolId, txHash },
+      { $set: { status: newStatus } },
+      { new: true },
+    );
+
+    const { logAudit } = require('../services/auditService');
+    await logAudit({
+      schoolId: req.schoolId,
+      action: 'payment_status_update',
+      performedBy: req.auditContext?.performedBy || 'unknown',
+      targetId: txHash,
+      targetType: 'payment',
+      details: { from: payment.status, to: newStatus, reason },
+      result: 'success',
+      ipAddress: req.auditContext?.ipAddress,
+      userAgent: req.auditContext?.userAgent,
+    });
+
+    res.json(updated);
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getPaymentInstructions,
   createPaymentIntent,
@@ -1498,4 +1559,5 @@ module.exports = {
   getQueueJobStatus,
   streamPaymentEvents,
   getPaymentSummary,
+  updatePaymentStatus,
 };

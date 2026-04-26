@@ -30,6 +30,7 @@ const {
   getQueueJobStatus,
   streamPaymentEvents,
   getPaymentSummary,
+  updatePaymentStatus,
 } = require("../controllers/paymentController");
 
 const {
@@ -103,5 +104,7 @@ router.get("/:studentId", validateStudentIdParam, getStudentPayments);
 
 router.post("/:paymentId/lock", lockPaymentForUpdate);
 router.post("/:paymentId/unlock", unlockPayment);
+
+router.patch("/:txHash/status", requireAdminAuth, auditContext, updatePaymentStatus);
 
 module.exports = router;

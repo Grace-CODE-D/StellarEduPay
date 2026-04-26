@@ -619,6 +619,11 @@ The backend will fetch recent transactions from the Stellar network and automati
 | `POLL_INTERVAL_MS` | No | `30000` | Background polling interval (milliseconds) |
 | `RETRY_INTERVAL_MS` | No | `60000` | Retry worker interval (milliseconds) |
 | `RETRY_MAX_ATTEMPTS` | No | `10` | Maximum retry attempts for failed verifications |
+| `REDIS_HOST` | No | - | Redis hostname. When set, rate-limit counters are stored in Redis and survive server restarts. Without this, counters are in-process only and reset on restart (see note below). |
+| `REDIS_PORT` | No | `6379` | Redis port |
+| `REDIS_PASSWORD` | No | - | Redis password (if required) |
+
+> **Rate limit persistence**: When `REDIS_HOST` is configured, rate-limit counters persist across server restarts and are shared across multiple instances. Without Redis, counters are stored in-process — a restart resets all counters, allowing a previously rate-limited client to make requests immediately after restart. This is a known limitation acceptable for single-process or development deployments.
 
 ### Frontend Variables
 

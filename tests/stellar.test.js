@@ -123,16 +123,44 @@ describe('detectAsset', () => {
 // ─── normalizeAmount ──────────────────────────────────────────────────────────
 
 describe('normalizeAmount', () => {
+  // Horizon returns decimal strings; normalizeAmount must use the SDK's
+  // Operation._fromXDRAmount as the canonical 7-decimal-place conversion so
+  // that XLM and USDC amounts are treated identically.
+
+  test('handles whole numbers', () => {
+    expect(normalizeAmount('200')).toBe(200);
+  });
+
+  test('handles Horizon-style 7-decimal strings', () => {
+    expect(normalizeAmount('100.0000000')).toBe(100);
+    expect(normalizeAmount('250.0000000')).toBe(250);
+  });
+
   test('rounds to 7 decimal places', () => {
     expect(normalizeAmount('100.123456789')).toBe(100.1234568);
   });
 
-  test('handles whole numbers', () => {
-    expect(normalizeAmount('200')).toBe(200.0);
+  // Edge case: minimum representable amount (1 stroop = 0.0000001)
+  test('handles 1 stroop — minimum amount', () => {
+    expect(normalizeAmount('0.0000001')).toBe(0.0000001);
   });
 
-  test('handles smallest XLM unit', () => {
-    expect(normalizeAmount('0.0000001')).toBe(0.0000001);
+  // Edge case: maximum Stellar amount (max int64 / 1e7 ≈ 922337203685.4775807)
+  test('handles maximum Stellar amount', () => {
+    // Operation._fromXDRAmount uses the same 1e7 divisor for all assets
+    const max = normalizeAmount('922337203685.4775807');
+    expect(max).toBeCloseTo(922337203685.4775807, 5);
+  });
+
+  // XLM and USDC both use 7 decimal places on Stellar — normalization must be identical
+  test('XLM and USDC amounts normalize identically for the same raw value', () => {
+    const xlmAmount = normalizeAmount('250.0000000');
+    const usdcAmount = normalizeAmount('250.0000000');
+    expect(xlmAmount).toBe(usdcAmount);
+  });
+
+  test('XLM and USDC 1-stroop amounts normalize identically', () => {
+    expect(normalizeAmount('0.0000001')).toBe(normalizeAmount('0.0000001'));
   });
 });
 

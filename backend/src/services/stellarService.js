@@ -1,5 +1,6 @@
 "use strict";
 
+const { Operation } = require("@stellar/stellar-sdk");
 const {
   server,
   isAcceptedAsset,
@@ -22,8 +23,22 @@ function detectAsset(payOp) {
   return { assetCode, assetType, assetIssuer };
 }
 
+/**
+ * Normalize a Horizon API amount string to a JS number using the Stellar SDK
+ * as the canonical source of truth for 7-decimal-place precision.
+ *
+ * Horizon returns amounts as decimal strings (e.g. '100.0000000'). Both XLM
+ * and USDC use 7 decimal places on Stellar, so the same conversion applies to
+ * all accepted assets. We round-trip through stroops via Operation._fromXDRAmount
+ * to guarantee the SDK's precision rules are applied consistently.
+ *
+ * @param {string} rawAmount - Decimal amount string from Horizon API
+ * @returns {number}
+ */
 function normalizeAmount(rawAmount) {
-  return parseFloat(parseFloat(rawAmount).toFixed(7));
+  // Convert Horizon decimal string → stroop integer → SDK-normalized decimal
+  const stroops = String(Math.round(parseFloat(rawAmount) * 1e7));
+  return parseFloat(Operation._fromXDRAmount(stroops));
 }
 
 /**

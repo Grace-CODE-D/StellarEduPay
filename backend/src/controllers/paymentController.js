@@ -403,8 +403,19 @@ async function verifyTransactionHash(req, res, next) {
 
 async function syncAllPayments(req, res, next) {
   try {
-    await syncPaymentsForSchool(req.school);
-    res.json({ message: "Sync complete" });
+    const summary = await syncPaymentsForSchool(req.school);
+    res.json({
+      message: "Sync complete",
+      summary: {
+        found:           summary.found,
+        new:             summary.new,
+        matched:         summary.matched,
+        unmatched:       summary.unmatched,
+        failed:          summary.failed,
+        alreadyProcessed: summary.alreadyProcessed,
+        failedDetails:   summary.failedDetails,
+      },
+    });
   } catch (err) {
     next(wrapStellarError(err));
   }

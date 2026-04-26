@@ -613,9 +613,7 @@ curl -X POST http://localhost:5000/api/payments/verify \
 POST /api/payments/sync
 ```
 
-Fetches the 20 most recent transactions to the school wallet from the Stellar
-Horizon API, matches memos to registered students, validates amounts, and records
-any new payments. Safe to call repeatedly — duplicate transactions are skipped.
+Fetches recent transactions from Stellar Horizon, matches memos to registered students, validates amounts, and records any new payments. Safe to call repeatedly — duplicate transactions are skipped.
 
 **Example request**
 
@@ -626,8 +624,31 @@ curl -X POST http://localhost:5000/api/payments/sync
 **Response `200 OK`**
 
 ```json
-{ "message": "Sync complete" }
+{
+  "message": "Sync complete",
+  "summary": {
+    "found": 12,
+    "new": 3,
+    "matched": 2,
+    "unmatched": 1,
+    "failed": 0,
+    "alreadyProcessed": 9,
+    "failedDetails": []
+  }
+}
 ```
+
+`summary` fields:
+
+| Field | Description |
+|---|---|
+| `found` | Total transactions fetched from Horizon |
+| `new` | Transactions not previously seen |
+| `matched` | Transactions matched to a student via PaymentIntent |
+| `unmatched` | Transactions with no matching intent or student |
+| `failed` | Transactions that failed validation (underpaid, wrong destination, limit exceeded) |
+| `alreadyProcessed` | Transactions already recorded — sync stopped here |
+| `failedDetails` | Array of `{ txHash, reason }` for each failed transaction |
 
 **Stellar network unavailable `502`**
 

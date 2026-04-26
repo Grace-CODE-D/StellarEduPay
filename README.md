@@ -257,9 +257,16 @@ You need a Stellar wallet to receive payments. Generate one using the Stellar La
 **Option B: Using the provided script**
 
 ```bash
-# Install backend dependencies first if you haven't already
-cd backend && npm install && cd ..
+# From the backend directory (recommended — dependencies are guaranteed to be available)
+cd backend
+npm install
+npm run create-wallet
+```
 
+Or from the project root after installing backend dependencies:
+
+```bash
+cd backend && npm install && cd ..
 node scripts/create-school-wallet.js
 ```
 

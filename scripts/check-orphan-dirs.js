@@ -13,6 +13,11 @@
  * incident: a directory name that looks like an editor's "duplicate" action
  * or a stray `cp -r` — either a near-typo of a sibling directory, or a
  * sibling name with a "copy/backup/old/tmp" style suffix stripped off.
+ *
+ * Extended (issue #1496): also scans tests/ at the file level for the same
+ * class of stale duplicate artefact (e.g. "alertRules.test copy.js"),
+ * closing the coverage gap that allowed two " copy" files to survive
+ * undetected in tests/state/.
  */
 
 const fs = require('fs');
@@ -20,11 +25,20 @@ const path = require('path');
 
 const SCAN_ROOT = path.join(__dirname, '../backend/src');
 
+// Additional roots scanned at the *file* level (not just directory level).
+const FILE_SCAN_ROOTS = [
+  path.join(__dirname, '../tests'),
+];
+
 const IGNORED_DIRS = new Set(['node_modules', 'coverage', '.git', 'dist', 'build', '.next']);
 
 // Suffixes (with an optional separator) that mark a directory as a copy of
 // another one, e.g. "queu-copy", "utils_bak", "routes.old", "models-tmp2".
 const DUPLICATE_SUFFIX_RE = /[-_. ]?(copy|old|backup|bak|dup|tmp|orig|original)\d*$/i;
+
+// Same pattern applied to file base-names (extension stripped first), e.g.
+// "alertRules.test copy" matches for "alertRules.test copy.js".
+const FILE_DUPLICATE_SUFFIX_RE = /[-_. ]+(copy|old|backup|bak|dup|tmp|orig|original)\d*$/i;
 
 // Sibling name pairs that happen to be edit-distance-close but are both
 // intentional, unrelated directories. Add an entry here (as "a|b", either
@@ -102,7 +116,57 @@ function checkOrphanDirs() {
   }
 
   console.log('✅ Near-miss directory check passed! No stray duplicate directories found.');
-  process.exit(0);
+}
+
+/**
+ * Scan FILE_SCAN_ROOTS recursively for files whose base-name (extension
+ * stripped) matches FILE_DUPLICATE_SUFFIX_RE — the same copy/backup/old/tmp
+ * pattern used for directories, applied at the individual-file level.
+ *
+ * Example match: "alertRules.test copy.js" → base "alertRules.test copy"
+ * → matched by FILE_DUPLICATE_SUFFIX_RE → flagged as a stale duplicate
+ * of the canonical "alertRules.test.js" in the same or parent directory.
+ */
+function walkFiles(dir, out = []) {
+  if (!fs.existsSync(dir)) return out;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (IGNORED_DIRS.has(entry.name)) continue;
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      walkFiles(full, out);
+    } else if (entry.isFile()) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+function checkOrphanFiles() {
+  const issues = [];
+
+  for (const root of FILE_SCAN_ROOTS) {
+    const files = walkFiles(root);
+    for (const filePath of files) {
+      const ext = path.extname(filePath);
+      const base = path.basename(filePath, ext);
+      if (FILE_DUPLICATE_SUFFIX_RE.test(base)) {
+        const rel = path.relative(path.join(__dirname, '..'), filePath);
+        issues.push(`❌ '${rel}' looks like a stale duplicate file (copy/backup/old suffix detected)`);
+      }
+    }
+  }
+
+  if (issues.length > 0) {
+    console.error('\n❌ Near-miss file check failed!\n');
+    issues.forEach(issue => console.error(issue));
+    console.error('\nDelete the stale duplicate file(s) listed above,');
+    console.error('or update FILE_SCAN_ROOTS / FILE_DUPLICATE_SUFFIX_RE in');
+    console.error('scripts/check-orphan-dirs.js if this is a false positive.');
+    process.exit(1);
+  }
+
+  console.log('✅ Near-miss file check passed! No stale duplicate files found in tests/.');
 }
 
 checkOrphanDirs();
+checkOrphanFiles();

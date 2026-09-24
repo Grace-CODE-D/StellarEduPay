@@ -31,6 +31,8 @@ resources:
   - backend-pdb.yaml
   - mongodb-pdb.yaml
   - backend-networkpolicy.yaml
+  - mongodb-networkpolicy.yaml
+  - redis-networkpolicy.yaml
   - backend-service.yaml
   - frontend-deployment.yaml
   - frontend-service.yaml

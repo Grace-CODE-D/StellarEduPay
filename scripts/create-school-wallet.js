@@ -5,8 +5,11 @@
  * 
  * Utility script to generate a new Stellar keypair for the school wallet.
  * This script also automatically funds the account on the Stellar Testnet.
+ * On Mainnet, Friendbot is skipped and funding guidance is printed instead.
  * 
- * Usage: node scripts/create-school-wallet.js
+ * Usage:
+ *   node scripts/create-school-wallet.js [--network testnet|mainnet]
+ *   Or set STELLAR_NETWORK=mainnet
  */
 
 const path = require('path');
@@ -15,6 +18,25 @@ const https = require('https');
 // Ensure we can find the Stellar SDK from the backend directory
 const backendNodeModules = path.join(__dirname, '..', 'backend', 'node_modules');
 module.paths.push(backendNodeModules);
+
+// Parse network option from CLI args or environment variable
+const args = process.argv.slice(2);
+let networkArg;
+for (let i = 0; i < args.length; i++) {
+  if (args[i].startsWith('--network=')) {
+    networkArg = args[i].split('=')[1];
+  } else if (args[i] === '--network' && args[i + 1]) {
+    networkArg = args[i + 1];
+    i++;
+  } else if (args[i] === '--mainnet') {
+    networkArg = 'mainnet';
+  } else if (args[i] === '--testnet') {
+    networkArg = 'testnet';
+  }
+}
+
+const network = (networkArg || process.env.STELLAR_NETWORK || 'testnet').toLowerCase();
+const isMainnet = network === 'mainnet' || network === 'public';
 
 try {
   const { Keypair } = require('@stellar/stellar-sdk');
@@ -50,6 +72,7 @@ try {
 
   async function run() {
     console.log('\n🚀 Starting School Wallet Generation...');
+    console.log(`   Network: ${isMainnet ? 'Mainnet' : 'Testnet'}`);
     console.log('─────────────────────────────────────────────────────────');
 
     try {
@@ -70,20 +93,35 @@ try {
       console.log('   - The StellarEduPay backend only requires the Public Key.');
       console.log('   - If you lose this secret key, you lose access to the funds!\n');
 
-      // 3. Fund via Friendbot
-      console.log('📡 Funding account via Stellar Friendbot (Testnet only)...');
-      
-      try {
-        const result = await fundWithFriendbot(publicKey);
-        console.log('\n🎉 Account successfully funded on Testnet!');
-        if (result.hash) {
-          console.log(`   Transaction Hash: ${result.hash}`);
+      if (isMainnet) {
+        // 3. Mainnet funding instructions
+        console.log('🌐 Mainnet network selected: skipping Friendbot (Friendbot is Testnet-only).');
+        console.log('\n💳 MAINNET FUNDING INSTRUCTIONS:');
+        console.log('   Stellar accounts require a minimum XLM base reserve to exist on-ledger.');
+        console.log('   To activate and fund this school wallet on Mainnet:');
+        console.log('   1. Send an initial balance of XLM (e.g. 5–10 XLM) to the Public Key:');
+        console.log(`      ${publicKey}`);
+        console.log('   2. Funding can be completed via:');
+        console.log('      - Transfer from an existing funded Stellar account or wallet (e.g. Freighter, Lobstr)');
+        console.log('      - Withdrawal of XLM from an exchange (e.g. Coinbase, Kraken, Binance) to this public key');
+        console.log('   3. Verify account activation on Stellar Expert:');
+        console.log(`      https://stellar.expert/explorer/public/account/${publicKey}`);
+      } else {
+        // 3. Fund via Friendbot
+        console.log('📡 Funding account via Stellar Friendbot (Testnet only)...');
+        
+        try {
+          const result = await fundWithFriendbot(publicKey);
+          console.log('\n🎉 Account successfully funded on Testnet!');
+          if (result.hash) {
+            console.log(`   Transaction Hash: ${result.hash}`);
+          }
+        } catch (fundErr) {
+          console.error('\n❌ Friendbot funding failed:');
+          console.error(`   ${fundErr.message}`);
+          console.log('\n   Note: You can still use this wallet, but you must fund it manually');
+          console.log('   at: https://laboratory.stellar.org/#account-creator?network=test');
         }
-      } catch (fundErr) {
-        console.error('\n❌ Friendbot funding failed:');
-        console.error(`   ${fundErr.message}`);
-        console.log('\n   Note: You can still use this wallet, but you must fund it manually');
-        console.log('   at: https://laboratory.stellar.org/#account-creator?network=test');
       }
 
       console.log('\n─────────────────────────────────────────────────────────');
@@ -91,6 +129,9 @@ try {
       console.log(`1. Copy the Public Key: ${publicKey}`);
       console.log('2. Add it to your backend/.env file:');
       console.log(`   SCHOOL_WALLET_ADDRESS=${publicKey}`);
+      if (isMainnet) {
+        console.log('   STELLAR_NETWORK=mainnet');
+      }
       console.log('3. Restart your backend server.');
       console.log('─────────────────────────────────────────────────────────\n');
 

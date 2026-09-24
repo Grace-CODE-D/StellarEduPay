@@ -55,11 +55,11 @@ async function rotateAll(School, { apply }) {
 }
 
 function validateEnv() {
-  const previousKey = process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS;
+  const previousKey = process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_OLD || process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS;
   const newKey = process.env.WEBHOOK_SECRET_ENCRYPTION_KEY;
-  if (!previousKey) throw new Error('WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS must be set to the key currently protecting stored webhook secrets.');
+  if (!previousKey) throw new Error('WEBHOOK_SECRET_ENCRYPTION_KEY_OLD or WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS must be set to the key currently protecting stored webhook secrets.');
   if (!newKey) throw new Error('WEBHOOK_SECRET_ENCRYPTION_KEY must be set to the new key to re-encrypt under.');
-  if (previousKey === newKey) throw new Error('WEBHOOK_SECRET_ENCRYPTION_KEY and WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS must differ.');
+  if (previousKey === newKey) throw new Error('WEBHOOK_SECRET_ENCRYPTION_KEY and previous key must differ.');
 }
 
 async function main() {

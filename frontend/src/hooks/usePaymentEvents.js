@@ -79,10 +79,31 @@ export function usePaymentEvents({ enabled = true, onEvent } = {}) {
       } catch { /* malformed — ignore */ }
     });
 
-    es.addEventListener('dispute.updated', (e) => {
+    es.addEventListener('dispute.resolved', (e) => {
       try {
         const data = JSON.parse(e.data);
-        onEventRef.current?.('dispute.updated', data);
+        onEventRef.current?.('dispute.resolved', data);
+      } catch { /* malformed — ignore */ }
+    });
+
+    es.addEventListener('dispute.rejected', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        onEventRef.current?.('dispute.rejected', data);
+      } catch { /* malformed — ignore */ }
+    });
+
+    es.addEventListener('dispute.under_review', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        onEventRef.current?.('dispute.under_review', data);
+      } catch { /* malformed — ignore */ }
+    });
+
+    es.addEventListener('dispute.reopened', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        onEventRef.current?.('dispute.reopened', data);
       } catch { /* malformed — ignore */ }
     });
 

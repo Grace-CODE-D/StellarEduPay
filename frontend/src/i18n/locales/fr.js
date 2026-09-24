@@ -262,6 +262,7 @@ const fr = {
     copyUri: "Copier l'URI de paiement",
     downloadQrAria: "Télécharger le code QR en PNG",
     downloadQr: "Télécharger le QR",
+    downloadQrFailed: "Échec du téléchargement du code QR. Veuillez réessayer.",
     acceptedAssets: "Actifs acceptés :",
     paymentHistory: "Historique des paiements",
     noPayments: "Aucun paiement enregistré pour le moment.",

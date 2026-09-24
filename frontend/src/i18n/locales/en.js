@@ -263,6 +263,7 @@ const en = {
     copyUri: "Copy payment URI",
     downloadQrAria: "Download QR code as PNG",
     downloadQr: "Download QR",
+    downloadQrFailed: "Failed to download QR code. Please try again.",
     acceptedAssets: "Accepted assets:",
     paymentHistory: "Payment History",
     noPayments: "No payments recorded yet.",

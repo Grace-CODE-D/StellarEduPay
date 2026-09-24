@@ -200,31 +200,59 @@ export default function PaymentForm({ initialStudentId = "" }) {
     const svgEl = qrWrapperRef.current?.querySelector("svg");
     if (!svgEl) return;
 
-    const svgData = new XMLSerializer().serializeToString(svgEl);
-    const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(svgBlob);
+    let url = null;
+    try {
+      const svgData = new XMLSerializer().serializeToString(svgEl);
+      const svgBlob = new Blob([svgData], { type: "image/svg+xml;charset=utf-8" });
+      url = URL.createObjectURL(svgBlob);
 
-    const img = new Image();
-    img.onload = () => {
-      const padding = 16;
-      const canvas = document.createElement("canvas");
-      canvas.width  = img.width  + padding * 2;
-      canvas.height = img.height + padding * 2;
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, padding, padding);
-      URL.revokeObjectURL(url);
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const padding = 16;
+          const canvas = document.createElement("canvas");
+          canvas.width  = img.width  + padding * 2;
+          canvas.height = img.height + padding * 2;
+          const ctx = canvas.getContext("2d");
+          ctx.fillStyle = "#ffffff";
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, padding, padding);
 
-      canvas.toBlob((blob) => {
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      }, "image/png");
-    };
-    img.src = url;
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              setError(t("paymentForm.downloadQrFailed"));
+              errorRef.current?.focus();
+              return;
+            }
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(blobUrl);
+          }, "image/png");
+        } catch (err) {
+          setError(t("paymentForm.downloadQrFailed"));
+          errorRef.current?.focus();
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        setError(t("paymentForm.downloadQrFailed"));
+        errorRef.current?.focus();
+      };
+
+      img.src = url;
+    } catch (err) {
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+      setError(t("paymentForm.downloadQrFailed"));
+      errorRef.current?.focus();
+    }
   }
 
   const isTestnet = process.env.NEXT_PUBLIC_STELLAR_NETWORK === "testnet";

@@ -72,18 +72,22 @@ export function usePaymentEvents({ enabled = true, onEvent } = {}) {
       } catch { /* malformed — ignore */ }
     });
 
-    es.addEventListener('dispute.created', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        onEventRef.current?.('dispute.created', data);
-      } catch { /* malformed — ignore */ }
-    });
+    const DISPUTE_EVENTS = [
+      'dispute.created',
+      'dispute.resolved',
+      'dispute.rejected',
+      'dispute.under_review',
+      'dispute.reopened',
+      'dispute.updated', // Retained for backwards compatibility
+    ];
 
-    es.addEventListener('dispute.updated', (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        onEventRef.current?.('dispute.updated', data);
-      } catch { /* malformed — ignore */ }
+    DISPUTE_EVENTS.forEach((eventName) => {
+      es.addEventListener(eventName, (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          onEventRef.current?.(eventName, data);
+        } catch { /* malformed — ignore */ }
+      });
     });
 
     // ── Connection lifecycle ──────────────────────────────────────────────────

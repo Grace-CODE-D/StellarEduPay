@@ -43,6 +43,9 @@ router.get('/overdue', requireSchoolAuth(), getOverdueStudents);
 // Public routes
 router.get('/public/:studentId', validateStudentIdParam, getPublicStudentInfo);
 router.get('/:studentId', requireAdminAuth, validateStudentIdParam, getStudent);
+// updateStudent performs a partial update, so PATCH is the accurate verb (issue
+// #1576); PUT is kept as an alias since the frontend previously relied on it.
+router.patch('/:studentId', requireAdminAuth, validateStudentIdParam, auditContext, updateStudent);
 router.put('/:studentId', requireAdminAuth, validateStudentIdParam, auditContext, updateStudent);
 router.delete('/:studentId', requireAdminAuth, validateStudentIdParam, auditContext, deleteStudent);
 router.post('/:studentId/restore', requireAdminAuth, validateStudentIdParam, auditContext, restoreStudent);

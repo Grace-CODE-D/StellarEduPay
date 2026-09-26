@@ -4,7 +4,12 @@ module.exports = {
   // Match every __tests__/*.test.js file under src/
   testMatch: ['<rootDir>/src/**/__tests__/**/*.test.[jt]s?(x)'],
   transform: {
-    '^.+\\.[jt]sx?$': ['babel-jest', { presets: [['@babel/preset-env', { targets: { node: 'current' } }]] }],
+    '^.+\\.[jt]sx?$': ['babel-jest', {
+      presets: [
+        ['@babel/preset-env', { targets: { node: 'current' } }],
+        ['@babel/preset-react', { runtime: 'automatic' }],
+      ],
+    }],
   },
   // Collect coverage for application source only — exclude tests and generated
   // files. Coverage is reported for lines, statements, functions AND branches

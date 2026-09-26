@@ -72,6 +72,9 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
     networks:
       - backend-db
     mem_limit: ${REDIS_MEM_LIMIT:-128m}
@@ -233,6 +236,7 @@ services:
 
 volumes:
   mongo_data:
+  redis_data:
 
 networks:
   frontend-backend:

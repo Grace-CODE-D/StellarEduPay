@@ -71,8 +71,18 @@ try {
   }
 
   async function run() {
+    // Parse network from CLI arguments or environment variable
+    const args = process.argv.slice(2);
+    const networkArg = args.find(arg => arg.startsWith('--network='));
+    const specifiedNetwork = networkArg
+      ? networkArg.split('=')[1].toLowerCase().trim()
+      : (process.env.STELLAR_NETWORK || 'testnet').toLowerCase().trim();
+
+    const isMainnet = specifiedNetwork === 'mainnet' || specifiedNetwork === 'public';
+    const networkName = isMainnet ? 'Public Mainnet' : 'Testnet';
+
     console.log('\n🚀 Starting School Wallet Generation...');
-    console.log(`   Network: ${isMainnet ? 'Mainnet' : 'Testnet'}`);
+    console.log(`🌐 Network: ${networkName}`);
     console.log('─────────────────────────────────────────────────────────');
 
     try {
@@ -89,27 +99,20 @@ try {
       // 2. Security Warning
       console.log('\n⚠️  SECURITY WARNING:');
       console.log('   - Keep your Secret Key SAFE and OFFLINE.');
-      console.log('   - Never share your secret key with anyone.');
-      console.log('   - The StellarEduPay backend only requires the Public Key.');
+      console.log('   - Never commit or expose secret keys in version control.');
+      console.log('   - The StellarEduPay backend only requires the Public Key (SCHOOL_WALLET_ADDRESS).');
       console.log('   - If you lose this secret key, you lose access to the funds!\n');
 
+      // 3. Account Funding
       if (isMainnet) {
-        // 3. Mainnet funding instructions
-        console.log('🌐 Mainnet network selected: skipping Friendbot (Friendbot is Testnet-only).');
-        console.log('\n💳 MAINNET FUNDING INSTRUCTIONS:');
-        console.log('   Stellar accounts require a minimum XLM base reserve to exist on-ledger.');
-        console.log('   To activate and fund this school wallet on Mainnet:');
-        console.log('   1. Send an initial balance of XLM (e.g. 5–10 XLM) to the Public Key:');
-        console.log(`      ${publicKey}`);
-        console.log('   2. Funding can be completed via:');
-        console.log('      - Transfer from an existing funded Stellar account or wallet (e.g. Freighter, Lobstr)');
-        console.log('      - Withdrawal of XLM from an exchange (e.g. Coinbase, Kraken, Binance) to this public key');
-        console.log('   3. Verify account activation on Stellar Expert:');
-        console.log(`      https://stellar.expert/explorer/public/account/${publicKey}`);
+        console.log('ℹ️  Mainnet Account Activation Guidance:');
+        console.log('   - Friendbot is NOT available on Stellar Public Mainnet.');
+        console.log('   - To activate this account, send a minimum of 1.5 - 2 XLM to:');
+        console.log(`     ${publicKey}`);
+        console.log('   - You can fund it from an exchange (e.g., Binance, Coinbase) or an existing Stellar wallet.');
+        console.log('   - Once funded with native XLM, establish a trustline for USDC if accepting stablecoin payments.');
       } else {
-        // 3. Fund via Friendbot
         console.log('📡 Funding account via Stellar Friendbot (Testnet only)...');
-        
         try {
           const result = await fundWithFriendbot(publicKey);
           console.log('\n🎉 Account successfully funded on Testnet!');

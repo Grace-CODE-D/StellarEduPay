@@ -78,7 +78,7 @@ export const getStudents = (page = 1, limit = 20, { search, status, className } 
   });
 export const getStudent = (studentId, { signal } = {}) => api.get(`/students/${studentId}`, { signal });
 export const registerStudent = (data) => api.post("/students", data);
-export const updateStudent = (studentId, data) => api.patch(`/students/${studentId}`, data);
+export const updateStudent = (studentId, data) => api.patch(`/students/${encodeURIComponent(studentId)}`, data);
 export const getPaymentSummary = () => api.get("/payments/summary");
 export const getPaymentInstructions = (studentId, { signal } = {}) => api.get(`/payments/instructions/${studentId}`, { signal });
 export const getStudentPayments = (studentId, { signal } = {}) => api.get(`/payments/${studentId}`, { signal });

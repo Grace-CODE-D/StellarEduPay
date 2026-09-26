@@ -240,6 +240,19 @@ describe('Authentication on Protected Endpoints (#562)', () => {
       expect(res.body.code).toBe('MISSING_AUTH_TOKEN');
     });
 
+    // Issue #1576: the frontend calls PATCH, but only PUT was registered, so
+    // every edit from the UI 404'd. PATCH is now also registered (PUT stays
+    // as an alias), so it must enforce the same auth as PUT.
+    test('PATCH /api/students/:studentId should require admin auth', async () => {
+      const res = await request(app)
+        .patch('/api/students/STU001')
+        .set('X-School-Id', 'school-a')
+        .send({ name: 'Alice Updated' })
+        .expect(401);
+
+      expect(res.body.code).toBe('MISSING_AUTH_TOKEN');
+    });
+
     test('DELETE /api/students/:studentId should require admin auth', async () => {
       const res = await request(app)
         .delete('/api/students/STU001')

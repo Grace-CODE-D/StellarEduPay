@@ -15,15 +15,17 @@
  * Prefixed with "enc:" so plaintext and encrypted values are distinguishable
  * at a glance (and for graceful migration).
  *
- * Key rotation (#1380): set WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS to the key
- * currently protecting stored secrets, set WEBHOOK_SECRET_ENCRYPTION_KEY to the
- * new key, then run scripts/rotate-webhook-encryption-key.js to re-encrypt every
- * school's webhookSecret under the new key. While WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS
- * is set, decryptWebhookSecret() transparently falls back to it whenever the
- * current key fails an auth-tag check, so requests handled by an instance that
- * hasn't picked up the new key yet (or a record the rotation script hasn't
- * reached) keep working during the rotation window. See the "Webhook secret
- * encryption key rotation" section of docs/security.md for the full procedure.
+ * Key rotation (#1380, #1495): set WEBHOOK_SECRET_ENCRYPTION_KEY_OLD (or
+ * WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS) to the key currently protecting
+ * stored secrets, set WEBHOOK_SECRET_ENCRYPTION_KEY to the new key, then
+ * run scripts/rotate-webhook-encryption-key.js or migration to re-encrypt every
+ * school's webhookSecret under the new key. While WEBHOOK_SECRET_ENCRYPTION_KEY_OLD
+ * (or WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS) is set, decryptWebhookSecret()
+ * transparently falls back to it whenever the current key fails an auth-tag check,
+ * so requests handled by an instance that hasn't picked up the new key yet (or a
+ * record the rotation script hasn't reached) keep working during the rotation window.
+ * See the "Webhook secret encryption key rotation" section of docs/security.md for
+ * the full procedure.
  */
 
 const crypto = require('crypto');
@@ -48,15 +50,16 @@ function _getKey() {
 
 /**
  * The previous encryption key, accepted as a decryption fallback during a
- * WEBHOOK_SECRET_ENCRYPTION_KEY rotation grace period (#1380). Absent outside
- * of a rotation window.
+ * WEBHOOK_SECRET_ENCRYPTION_KEY rotation grace period (#1380, #1495).
+ * Reads WEBHOOK_SECRET_ENCRYPTION_KEY_OLD or WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS.
+ * Absent outside of a rotation window.
  */
 function _getPreviousKey() {
-  const hex = process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS;
+  const hex = process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_OLD || process.env.WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS;
   if (!hex) return null;
   if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
     throw new Error(
-      '[webhookSecretEncryption] WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS must be a ' +
+      '[webhookSecretEncryption] WEBHOOK_SECRET_ENCRYPTION_KEY_OLD / WEBHOOK_SECRET_ENCRYPTION_KEY_PREVIOUS must be a ' +
       '64-character hex string (32 bytes), same format as WEBHOOK_SECRET_ENCRYPTION_KEY.'
     );
   }

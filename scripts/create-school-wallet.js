@@ -5,8 +5,11 @@
  * 
  * Utility script to generate a new Stellar keypair for the school wallet.
  * This script also automatically funds the account on the Stellar Testnet.
+ * On Mainnet, Friendbot is skipped and funding guidance is printed instead.
  * 
- * Usage: node scripts/create-school-wallet.js
+ * Usage:
+ *   node scripts/create-school-wallet.js [--network testnet|mainnet]
+ *   Or set STELLAR_NETWORK=mainnet
  */
 
 const path = require('path');
@@ -15,6 +18,25 @@ const https = require('https');
 // Ensure we can find the Stellar SDK from the backend directory
 const backendNodeModules = path.join(__dirname, '..', 'backend', 'node_modules');
 module.paths.push(backendNodeModules);
+
+// Parse network option from CLI args or environment variable
+const args = process.argv.slice(2);
+let networkArg;
+for (let i = 0; i < args.length; i++) {
+  if (args[i].startsWith('--network=')) {
+    networkArg = args[i].split('=')[1];
+  } else if (args[i] === '--network' && args[i + 1]) {
+    networkArg = args[i + 1];
+    i++;
+  } else if (args[i] === '--mainnet') {
+    networkArg = 'mainnet';
+  } else if (args[i] === '--testnet') {
+    networkArg = 'testnet';
+  }
+}
+
+const network = (networkArg || process.env.STELLAR_NETWORK || 'testnet').toLowerCase();
+const isMainnet = network === 'mainnet' || network === 'public';
 
 try {
   const { Keypair } = require('@stellar/stellar-sdk');
@@ -110,6 +132,9 @@ try {
       console.log(`1. Copy the Public Key: ${publicKey}`);
       console.log('2. Add it to your backend/.env file:');
       console.log(`   SCHOOL_WALLET_ADDRESS=${publicKey}`);
+      if (isMainnet) {
+        console.log('   STELLAR_NETWORK=mainnet');
+      }
       console.log('3. Restart your backend server.');
       console.log('─────────────────────────────────────────────────────────\n');
 
